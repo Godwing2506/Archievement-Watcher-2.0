@@ -1,0 +1,29 @@
+{
+  "links": [
+    { "ach": "ACH_01", "stat": "stat_complete_first_day", "max": 1 },
+    { "ach": "ACH_02", "stat": "stat_complete_quota", "max": 1 },
+    { "ach": "ACH_03", "stat": "stat_complete_full_quota", "max": 1 },
+    { "ach": "ACH_04", "stat": "stat_take_first_tool", "max": 1 },
+    { "ach": "ACH_05", "stat": "stat_research_symptom", "max": 1 },
+    { "ach": "ACH_06", "stat": "stat_hammer_ragdoll", "max": 1 },
+    { "ach": "ACH_07", "stat": "stat_take_zombie_part", "max": 1 },
+    { "ach": "ACH_08", "stat": "stat_take_contraband", "max": 1 },
+    { "ach": "ACH_09", "stat": "stat_clear_quarantine", "max": 1 },
+    { "ach": "ACH_10", "stat": "stat_kill_rat", "max": 1 },
+    { "ach": "ACH_11", "stat": "stat_kill_rat", "max": 30 },
+    { "ach": "ACH_12", "stat": "stat_take_hidden", "max": 1 },
+    { "ach": "ACH_13", "stat": "stat_perfect_day", "max": 1 },
+    { "ach": "ACH_14", "stat": "stat_complete_dynamic_rule", "max": 1 },
+    { "ach": "ACH_15", "stat": "stat_earn_money_50000", "max": 50000 },
+    { "ach": "ACH_16", "stat": "stat_brain_basket", "max": 1 },
+    { "ach": "ACH_17", "stat": "stat_bad_ending", "max": 1 },
+    { "ach": "ACH_18", "stat": "stat_good_ending", "max": 1 },
+    { "ach": "ACH_19", "stat": "stat_use_staff_tool", "max": 1 },
+    { "ach": "ACH_20", "stat": "stat_complete_eliminate_dynamic_rule", "max": 1 },
+    { "ach": "ACH_21", "stat": "stat_upgrade_building", "max": 1 },
+    { "ach": "ACH_22", "stat": "stat_dinner_served", "max": 1 },
+    { "ach": "ACH_23", "stat": "stat_next_day", "max": 100 },
+    { "ach": "ACH_24", "stat": "stat_break_energy", "max": 1 },
+    { "ach": "ACH_25", "stat": "stat_angry_kill", "max": 1 }
+  ]
+}

@@ -10,27 +10,104 @@ const moment = require('moment');
 const request = require('request-zero');
 const urlParser = require('url');
 const ffs = require("@xan105/fs");
-const regedit = require('regodit');
+const regedit = require('../util/reg_shim');
+
+const resolveAppPath = require(path.join(__dirname, "../util/resolveAppPath.js"));
+const appPath = resolveAppPath(remote);
+
 const steamID = require(path.join(appPath,"util/steamID.js"));
 const steamLanguages = require(path.join(appPath,"locale/steam.json"));
 const sse = require(path.join(appPath,"parser/sse.js"));
 const htmlParser = require("node-html-parser");
+const translator = require(path.join(appPath,"util/translator.js"));
+const { normalizeGoldbergUserAchievements } = require(path.join(__dirname, "goldbergAchievements.js"));
+const { statsLocalToAchievements, hasClassicAchievementSections, buildAchievementStatLinks } = require(path.join(__dirname, "statsIniAchievements.js"));
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label || `Timeout after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 const cacheRoot = remote.app.getPath('userData');
 
+const SCHEMA_LANG_FALLBACK = ["latam", "spanish", "english"];
+
+function loadFallbackStatLinks(appId) {
+  try {
+    const filePath = path.join(__dirname, "statAchievementFallback", `${appId}.json`);
+    if (!ffs.exists(filePath)) return [];
+    const data = JSON.parse(require("fs").readFileSync(filePath, "utf8"));
+    return Array.isArray(data.links) ? data.links : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function loadSchemaFromCache(appId, lang) {
+  const langs = lang ? [lang, ...SCHEMA_LANG_FALLBACK.filter((l) => l !== lang)] : SCHEMA_LANG_FALLBACK;
+  for (const l of langs) {
+    const filePath = path.join(cacheRoot, "steam_cache", "schema", l, `${appId}.db`);
+    try {
+      if (await ffs.exists(filePath)) {
+        const data = JSON.parse(await ffs.readFile(filePath, "utf8"));
+        if (data.achievement && data.achievement.total > 0) return data;
+      }
+    } catch (e) { /* try next */ }
+  }
+  return null;
+}
+
+function enrichSchemaStatLinks(result, appId) {
+  if (!result) return result;
+  if (!Array.isArray(result.achievementStatLinks) || result.achievementStatLinks.length === 0) {
+    const fromList = buildAchievementStatLinks(result.achievement && result.achievement.list);
+    result.achievementStatLinks = fromList.length > 0 ? fromList : loadFallbackStatLinks(appId);
+  }
+  return result;
+}
+
+/** Steam AppID folders under Goldberg (skip SteamID64 roots, typically 17 digits). */
+function isLikelySteamAppIdFolder(name) {
+  return /^[0-9]+$/.test(name) && name.length <= 10;
+}
+
+async function resolveGoldbergScanPath(dir) {
+  const appid = path.parse(dir).name;
+  if (await ffs.exists(path.join(dir, "achievements.json"))) return dir;
+  if (await ffs.exists(path.join(dir, "achievements.ini"))) return dir;
+  const parent = path.dirname(dir);
+  if (path.basename(parent) === "remote" && isLikelySteamAppIdFolder(appid)) {
+    const appidRoot = path.join(parent, "..");
+    if (await ffs.exists(path.join(appidRoot, "achievements.json"))) return appidRoot;
+    if (await ffs.exists(path.join(appidRoot, "achievements.ini"))) return appidRoot;
+  }
+  return dir;
+}
+
 module.exports.scan = async (additionalSearch = []) => {
   try {
+    const scanStart = Date.now();
 
     let search = [
         path.join(process.env['Public'],"Documents/Steam/CODEX"), 
         path.join(process.env['APPDATA'],"Goldberg SteamEmu Saves"),
+        path.join(process.env['Public'],"Documents/Steam/Goldberg SteamEmu Saves"),
         path.join(process.env['APPDATA'],"EMPRESS"),
         path.join(process.env['Public'],"Documents/EMPRESS"),
         path.join(process.env['APPDATA'],"Steam/CODEX"),
-        path.join(process.env['PROGRAMDATA'],"Steam")+"/*",
+        path.join(process.env['PROGRAMDATA'] || '', 'Steam', '*'),
         path.join(process.env['LOCALAPPDATA'],"SKIDROW"),
         path.join(process.env['APPDATA'],"SmartSteamEmu"),
-        path.join(process.env['APPDATA'],"CreamAPI")
+        path.join(process.env['APPDATA'],"CreamAPI"),
+        path.join(process.env['Public'],"Documents/Steam/RUNE"),
+        path.join(process.env['Public'],"Documents/Steam/CreamAPI"),
+        path.join(process.env['Public'],"Documents/Steam/TENOKE"),
+        path.join(process.env['Public'],"Documents/Steam/DOGE"),
+        path.join(process.env['Public'],"Documents/Steam/Fairlight"),
+        path.join(process.env['APPDATA'],"FLT/Steam")
     ];
     
     const mydocs = await regedit.promises.RegQueryStringValueAndExpand("HKCU","Software/Microsoft/Windows/CurrentVersion/Explorer/User Shell Folders","Personal");
@@ -42,10 +119,45 @@ module.exports.scan = async (additionalSearch = []) => {
     
     if(additionalSearch.length > 0) search = search.concat(additionalSearch);
     
-    search = search.map((dir) => { return normalize(dir) + "/([0-9]+)" });
+    // Pattern for numeric AppID folders
+    const numericSearch = search.map((dir) => { return normalize(dir) + "/([0-9]+)" });
+    // Pattern for any folder that might contain an emulator config (for named folders)
+    const namedSearch = search.map((dir) => { return normalize(dir) + "/*" });
     
     let data = [];
-    for (let dir of await glob(search,{onlyDirectories: true, absolute: true})) {
+    const goldbergRoots = [
+      path.join(process.env['APPDATA'] || '', 'Goldberg SteamEmu Saves'),
+      path.join(process.env['Public'] || '', 'Documents/Steam/Goldberg SteamEmu Saves')
+    ];
+    try {
+      const tGold = Date.now();
+      for (const goldbergRoot of goldbergRoots) {
+        if (!(await ffs.exists(goldbergRoot))) continue;
+        const goldbergRemote = await glob(normalize(goldbergRoot) + "/**/remote/([0-9]+)", { onlyDirectories: true, absolute: true, deep: 5, suppressErrors: true });
+        for (const dir of goldbergRemote) {
+          const appid = path.parse(dir).name;
+          if (!isLikelySteamAppIdFolder(appid)) continue;
+          const scanPath = await resolveGoldbergScanPath(dir);
+          if (!data.some(g => g.appid === appid && g.source === "Goldberg")) {
+            data.push({ appid, source: "Goldberg", data: { type: "file", path: scanPath } });
+          }
+        }
+        // Goldberg saves user achievements at .../<appid>/ (not only under remote/)
+        const goldbergAppDirs = await glob(normalize(goldbergRoot) + "/([0-9]+)", { onlyDirectories: true, absolute: true, suppressErrors: true });
+        for (const dir of goldbergAppDirs) {
+          const appid = path.parse(dir).name;
+          if (!isLikelySteamAppIdFolder(appid)) continue;
+          if (data.some(g => g.appid === appid && g.source === "Goldberg")) continue;
+          data.push({ appid, source: "Goldberg", data: { type: "file", path: dir } });
+        }
+      }
+      if (Date.now() - tGold > 1000) debug.log(`[DIAG] steam.scan Goldberg block took ${Date.now()-tGold}ms`);
+    } catch (e) { /* ignore */ }
+    
+    // Scan numeric folders
+    const tNum = Date.now();
+    for (let dir of await glob(numericSearch,{onlyDirectories: true, absolute: true, suppressErrors: true})) {
+                if (dir.includes("Goldberg")) continue;
     
                 let game = { 
                     appid: path.parse(dir).name, 
@@ -56,9 +168,7 @@ module.exports.scan = async (additionalSearch = []) => {
                 
                 if (dir.includes("CODEX")) {
                   game.source = "Codex";
-                } else if (dir.includes("Goldberg")){
-                  game.source = "Goldberg";
-				} else if (dir.includes("EMPRESS")){
+                } else if (dir.includes("EMPRESS")){
                   game.source = "Goldberg (EMPRESS)";
                   game.data.path = path.join(game.data.path,"remote",game.appid);
                 } else if (dir.includes("SKIDROW")){
@@ -69,10 +179,59 @@ module.exports.scan = async (additionalSearch = []) => {
                   game.source = "Reloaded - 3DM";
                 } else if (dir.includes("CreamAPI")){
                   game.source = "CreamAPI";
+                } else if (dir.includes("RUNE")){
+                  game.source = "RUNE";
+                } else if (dir.includes("TENOKE")){
+                  game.source = "TENOKE";
+                } else if (dir.includes("DOGE")){
+                  game.source = "DOGE";
+                } else if (dir.includes("Fairlight")){
+                  game.source = "Fairlight";
+                } else if (dir.includes("FLT")){
+                  game.source = "FLT";
                 }
 
                 data.push(game);
-    };    
+    }
+
+    if (Date.now() - tNum > 1000) debug.log(`[DIAG] steam.scan numeric block took ${Date.now()-tNum}ms`);
+
+    // Scan for named folders with config files (new logic)
+    const tNamed = Date.now();
+    const emuIniFiles = ["steam_emu.ini", "SteamConfig.ini", "valve.ini", "tenoke.ini", "RUNE.ini", "flt.ini", "Achievements.ini"];
+    for (let dir of await glob(namedSearch, { onlyDirectories: true, absolute: true, suppressErrors: true })) {
+      if (path.parse(dir).name.match(/^[0-9]+$/)) continue; // skip numeric folders already scanned
+      
+      for (const iniFile of emuIniFiles) {
+        const fullIni = path.join(dir, iniFile);
+        if (await ffs.exists(fullIni)) {
+          try {
+            let appid;
+            if (iniFile === "Achievements.ini") {
+              // Sometimes Achievements.ini is just there, we might not get AppID easily
+              // but we can try to find it in the path or skip if not found
+            } else {
+              const content = await ffs.readFile(fullIni, "utf8");
+              const parsed = ini.parse(content);
+              appid = parsed.Settings?.AppId || parsed.Settings?.AppID || parsed.GameSettings?.AppId || parsed.GameSettings?.AppID;
+            }
+            
+            if (appid) {
+              data.push({
+                appid: appid.toString(),
+                source: "Emulator (Auto-detected)",
+                data: { type: "file", path: dir }
+              });
+              break;
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    if (Date.now() - tNamed > 1000) debug.log(`[DIAG] steam.scan named block took ${Date.now()-tNamed}ms`);
+    if (Date.now() - scanStart > 1000) debug.log(`[DIAG] steam.scan TOTAL took ${Date.now()-scanStart}ms`);
+
     return data;
   
   }catch(err){
@@ -85,7 +244,7 @@ module.exports.scanLegit = async (listingType = 0) => {
   
   let data = [];
   
-  if (regedit.RegKeyExists("HKCU","Software/Valve/Steam") && listingType > 0){ 
+  if (listingType > 0){ 
   
          let steamPath = await getSteamPath();
          let publicUsers = await getSteamUsers(steamPath);
@@ -144,16 +303,69 @@ module.exports.getGameData = async (cfg) => {
 
     if (await ffs.existsAndIsYoungerThan(filePath,{timeUnit: 'M', time: 6})) {
         result = JSON.parse(await ffs.readFile(filePath));
-    } else {
-        if (cfg.key) {
-          result = await getSteamData(cfg);
-        } else {
-          result = await getSteamDataFromSRV(cfg.appID, cfg.lang);
+        result = enrichSchemaStatLinks(result, cfg.appID);
+        if (result.achievement && result.achievement.total === 0 && cfg.key && cfg.key.trim()) {
+          try {
+            result = await withTimeout(getSteamData(cfg), 20000, `Steam API timeout (app ${cfg.appID})`);
+            if (result.achievement && result.achievement.total > 0) {
+              ffs.writeFile(filePath, JSON.stringify(result, null, 2)).catch(() => {});
+            }
+          } catch (e) {
+            const cached = await loadSchemaFromCache(cfg.appID, cfg.lang);
+            if (cached) result = enrichSchemaStatLinks(cached, cfg.appID);
+          }
         }
-        ffs.writeFile(filePath,JSON.stringify(result, null, 2)).catch((err) => {});                 
+    } else {
+        try {
+            if (cfg.key && cfg.key.trim()) {
+              result = await withTimeout(getSteamData(cfg), 20000, `Steam API timeout (app ${cfg.appID})`);
+            } else {
+              throw "No Steam Web API Key provided and Cache Server is shutdown.";
+            }
+        } catch (e) {
+            if (e === "Invalid API key") throw e;
+            const cached = await loadSchemaFromCache(cfg.appID, cfg.lang);
+            if (cached) {
+              result = enrichSchemaStatLinks(cached, cfg.appID);
+            } else {
+            //Fallback to basic info from Store
+            const store = await getDataFromSteamStore(+cfg.appID);
+            if(store.name){
+                // Try to get achievements from public XML API
+                const publicAchievements = await getAchievementsFromXML(+cfg.appID);
+                
+                result = {
+                    name: store.name, 
+                    appid: cfg.appID,
+                    binary: null,
+                    img: {
+                      header: `https://cdn.akamai.steamstatic.com/steam/apps/${cfg.appID}/header.jpg`,
+                      background: `https://cdn.akamai.steamstatic.com/steam/apps/${cfg.appID}/page_bg_generated_v6b.jpg`,
+                      portrait: `https://cdn.akamai.steamstatic.com/steam/apps/${cfg.appID}/library_600x900.jpg`,
+                      icon: store.icon ? `https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/${cfg.appID}/${store.icon}.jpg` : null
+                    },
+                    achievement: {
+                      total: publicAchievements.length,
+                      list: publicAchievements
+                    }
+                };
+                result = enrichSchemaStatLinks(result, cfg.appID);
+            } else {
+                throw e;
+            }
+            }
+        }
+        if (result && result.achievement && result.achievement.total > 0) {
+          ffs.writeFile(filePath,JSON.stringify(result, null, 2)).catch((err) => {});
+        }
+   }
+
+   if (!result || !result.achievement || result.achievement.total === 0) {
+     const cached = await loadSchemaFromCache(cfg.appID, cfg.lang);
+     if (cached) result = enrichSchemaStatLinks(cached, cfg.appID);
    }
    
-   return result;
+   return enrichSchemaStatLinks(result, cfg.appID);
    
  }catch(err) {
   if (err.code)
@@ -175,27 +387,98 @@ module.exports.getAchievementsFromFile = async (filePath) => {
     "achieve.dat",
     "Achievements.ini",
     "stats/achievements.ini",
+    "remote/achievements.ini",
+    "remote/achievements.json",
     "stats.bin",
-    "stats/CreamAPI.Achievements.cfg"
+    "stats/CreamAPI.Achievements.cfg",
+    "SteamEmu/UserStats/achievements.ini",
+    "SteamEmu/achievements.ini",
+    "tenoke.ini",
+    "run.ini",
+    "rune.ini",
+    "data.ini",
+    "save.ini"
   ];
   
   const filter = ["SteamAchievements","Steam64","Steam"];
   
-  let local;                            
+  let local;
+  let tried = [];
+  
+  // First pass: standard files (skip empty achievements.ini — RUNE may only use stats.ini)
   for (let file of files) {
+     const full = path.join(filePath, file);
+     tried.push(file);
      try {
-
-       if (path.parse(file).ext == ".json") {
-          local = JSON.parse(await ffs.readFile(path.join(filePath,file),"utf8"));
-       } else if (file === "stats.bin"){
-          local = sse.parse(await ffs.readFile(path.join(filePath,file)));
-       } else {
-          local = ini.parse(await ffs.readFile(path.join(filePath,file),"utf8"));
+       if (await ffs.exists(full)) {
+         let parsed;
+         if (path.parse(file).ext == ".json") {
+            parsed = JSON.parse(await ffs.readFile(full,"utf8"));
+         } else if (file === "stats.bin"){
+            parsed = sse.parse(await ffs.readFile(full));
+         } else {
+            let content = "";
+            try { content = await ffs.readFile(full, "utf8"); } catch(e){}
+            if (!content) try { content = await ffs.readFile(full, "ucs2"); } catch(e){}
+            if (!content) try { content = await ffs.readFile(full, "utf16le"); } catch(e){}
+            if (content) {
+              parsed = ini.parse(content);
+            }
+         }
+         if (!parsed) continue;
+         if (file === "achievements.ini" && !hasClassicAchievementSections(parsed)) continue;
+         local = parsed;
+         break;
        }
-       break;
      } catch (e) {}
-  }              
-  if(!local) throw `No achievement file found in '${filePath}'`; 
+  }
+
+  // Second pass: deep search if not found (for emulators with SteamID subfolders)
+  if (!local) {
+    try {
+      const deepFiles = await glob("**/{achievements,tenoke,rune,data,achiev,stats}.{ini,json}", { cwd: filePath, absolute: true, deep: 5 });
+      if (deepFiles.length > 0) {
+        const full = deepFiles[0];
+        tried.push(path.relative(filePath, full));
+        if (path.parse(full).ext == ".json") {
+          let content = "";
+          try { content = await ffs.readFile(full,"utf8"); } catch(e){}
+          if (!content) try { content = await ffs.readFile(full, "ucs2"); } catch(e){}
+          if (content) local = JSON.parse(content);
+        } else {
+          let content = "";
+          try { content = await ffs.readFile(full,"utf8"); } catch(e){}
+          if (!content) try { content = await ffs.readFile(full, "ucs2"); } catch(e){}
+          if (!content) try { content = await ffs.readFile(full, "utf16le"); } catch(e){}
+          if (content) local = ini.parse(content);
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Goldberg: scan path may point at remote/<appid> while achievements.json is in the appid root
+  if (!local) {
+    const parent = path.dirname(filePath);
+    if (path.basename(parent) === "remote") {
+      const appidRoot = path.join(parent, "..");
+      const goldbergAch = path.join(appidRoot, "achievements.json");
+      tried.push(path.relative(filePath, goldbergAch));
+      try {
+        if (await ffs.exists(goldbergAch)) {
+          local = JSON.parse(await ffs.readFile(goldbergAch, "utf8"));
+        }
+      } catch (e) {}
+    }
+  }
+
+  if(!local) throw `No achievement file found in '${filePath}' (tried: ${tried.slice(0,5).join(", ")}...)`; 
+
+  const appId = path.basename(filePath);
+  const fromStats = statsLocalToAchievements(local, appId);
+  if (fromStats) return fromStats;
+
+  const goldbergUser = normalizeGoldbergUserAchievements(local);
+  if (goldbergUser) return goldbergUser;
                           
   let result = {};                     
   
@@ -218,7 +501,32 @@ module.exports.getAchievementsFromFile = async (filePath) => {
       }
     }
   } else {
-    result = omit(local.ACHIEVE_DATA || local, filter);
+    // ORIGINAL y SEGURO para instalador: primero el clásico
+    result = omit(local, filter);
+    
+    // Si el clásico NO DA NADA, probamos nuevas secciones (para juegos como Quarantine Zone)
+    if (Object.keys(result).length === 0) {
+      const modernData = local.ACHIEVE_DATA || local.Achievements || local.SteamAchievements;
+      if (modernData) {
+        result = omit(modernData, filter);
+      }
+    }
+    
+    // Si aún está vacío, probamos una última cosa: tal vez las claves son directamente sin secciones
+    if (Object.keys(result).length === 0) {
+      // Iteramos todas las claves y filtramos las que parezcan logros
+      for (let key in local) {
+        if (Object.prototype.hasOwnProperty.call(local, key)) {
+          const val = local[key];
+          // Si es un objeto con Achieved o parece un logro
+          if (typeof val === 'object' && val !== null && 
+              (val.Achieved !== undefined || val.achieved !== undefined || val.earned !== undefined ||
+               val.State !== undefined || val.UnlockTime !== undefined || val.progress !== undefined)) {
+            result[key] = val;
+          }
+        }
+      }
+    }
   }
 
   for (let i in result) {
@@ -273,7 +581,7 @@ module.exports.getAchievementsFromAPI = async(cfg) => {
     }
     
     if (time.steam > time.local) {
-        if (cfg.key) {
+        if (cfg.key && cfg.key.trim()) {
           result = await getSteamUserStats(cfg);
         } else {
           result = await getSteamUserStatsFromSRV(cfg.user.id,cfg.appID);
@@ -380,7 +688,7 @@ function getSteamUserStatsFromSRV(user,appID) {
 
 async function getSteamUserStats(cfg) {
 
-  const url = `http://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=${cfg.appID}&key=${cfg.key}&steamid=${cfg.user.id}"`;
+  const url = `http://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=${cfg.appID}&key=${cfg.key}&steamid=${cfg.user.id}`;
 
   try {
 
@@ -391,6 +699,27 @@ async function getSteamUserStats(cfg) {
     throw err
   }
 
+};
+
+/**
+ * Get Steam profile display name (personaname) via Web API.
+ * @param {string} apiKey - Steam Web API key
+ * @param {string} steamId64 - Steam ID 64-bit
+ * @returns {Promise<string|null>} personaname or null on failure
+ */
+const getSteamProfileName = module.exports.getSteamProfileName = async (apiKey, steamId64) => {
+  if (!apiKey || !apiKey.trim() || !steamId64) return null;
+  try {
+    const url = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${encodeURIComponent(apiKey)}&steamids=${encodeURIComponent(steamId64)}`;
+    const data = await request.getJson(url);
+    const players = data && data.response && data.response.players;
+    if (Array.isArray(players) && players.length > 0 && players[0].personaname) {
+      return players[0].personaname;
+    }
+  } catch (e) {
+    debug.log('getSteamProfileName: ' + (e && e.message));
+  }
+  return null;
 };
 
 function getSteamDataFromSRV(appID,lang){
@@ -420,12 +749,77 @@ async function getSteamData(cfg) {
   
   const url = `https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v0002/?key=${cfg.key}&appid=${cfg.appID}&l=${cfg.lang}&format=json`;
 
-  const data = await request.getJson(url);
+  const data = await request.getJson(url, { timeout: 15000 });
+  
+  if (data.response && data.response.error) {
+    if (data.response.error.errordesc === "Invalid API key") throw "Invalid API key";
+    else throw data.response.error.errordesc;
+  }
   
   const schema = data.game.availableGameStats;
   if (!(schema && schema.achievements && schema.achievements.length > 0)) throw "Schema doesn't have any achievement";
 
   const store = await getDataFromSteamStore(+cfg.appID);
+
+  // El esquema ya viene en cfg.lang desde la API de Steam; autoTranslate solo si hace falta
+  let achievements = schema.achievements;
+  
+  if (cfg.autoTranslate === true && cfg.lang !== "english" && cfg.lang !== "schinese" && cfg.lang !== "tchinese") {
+    try {
+      // Determinar el idioma de destino basado en cfg.lang
+      const langMap = {
+        "spanish": "es",
+        "latam": "es",
+        "portuguese": "pt",
+        "french": "fr",
+        "german": "de",
+        "russian": "ru",
+        "japanese": "ja",
+        "korean": "ko",
+        "italian": "it",
+        "dutch": "nl",
+        "polish": "pl",
+        "brazilian": "pt",
+        "ukrainian": "uk",
+        "thai": "th",
+        "greek": "el"
+      };
+      
+      const targetLang = langMap[cfg.lang];
+      
+      if (targetLang) {
+        const batchSize = 5;
+        const translated = [];
+        
+        for (let i = 0; i < schema.achievements.length; i += batchSize) {
+          const batch = schema.achievements.slice(i, i + batchSize);
+          const translatedBatch = await Promise.all(
+            batch.map(async (ach) => {
+              try {
+                if (translator.isLikelyEnglish(ach.displayName) || translator.isLikelyEnglish(ach.description)) {
+                  return await translator.translateAchievement(ach, "en", targetLang);
+                }
+              } catch (err) {
+                // Error individual de traducción, continuar sin traducir este logro
+              }
+              return ach;
+            })
+          );
+          translated.push(...translatedBatch);
+        }
+        
+        achievements = translated;
+      }
+    } catch (err) {
+      // Si la traducción falla completamente, usar los logros originales
+      achievements = schema.achievements;
+    }
+  }
+
+  let achievementStatLinks = buildAchievementStatLinks(achievements);
+  if (achievementStatLinks.length === 0) {
+    achievementStatLinks = loadFallbackStatLinks(cfg.appID);
+  }
 
   const result = {
     name: store.name || await findInAppList(+cfg.appID), 
@@ -438,12 +832,43 @@ async function getSteamData(cfg) {
       icon: store.icon ? `https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/${cfg.appID}/${store.icon}.jpg` : null
     },
     achievement: {
-      total: schema.achievements.length,
-      list: schema.achievements
-    }
+      total: achievements.length,
+      list: achievements
+    },
+    achievementStatLinks,
+    stats: schema.stats || []
   };
           
   return result;
+}
+
+async function getAchievementsFromXML(appID) {
+  const url = `https://steamcommunity.com/stats/${appID}/achievements/?xml=1`;
+  try {
+    const { body } = await request(url);
+    const html = htmlParser.parse(body);
+    const achievements = [];
+    const achNodes = html.querySelectorAll('achievement');
+    
+    for (const node of achNodes) {
+      const nameNode = node.querySelector('apiname');
+      const displayNode = node.querySelector('name');
+      const descNode = node.querySelector('description');
+      const iconNode = node.querySelector('iconClosed');
+      
+      if (nameNode && displayNode) {
+        achievements.push({
+          name: nameNode.textContent || nameNode.innerText,
+          displayName: displayNode.textContent || displayNode.innerText,
+          description: descNode ? (descNode.textContent || descNode.innerText) : "",
+          icon: iconNode ? (iconNode.textContent || iconNode.innerText) : ""
+        });
+      }
+    }
+    return achievements;
+  } catch (e) {
+    return [];
+  }
 }
 
 async function getDataFromSteamStore(appID){
@@ -462,14 +887,15 @@ async function getDataFromSteamStore(appID){
     }); 
        
     const html = htmlParser.parse(body);
+    const nameEl = html.querySelector('.apphub_AppName');
+    const iconEl = html.querySelector('.apphub_AppIcon img');
+    const name = (nameEl && (nameEl.textContent || nameEl.innerText || '').trim()) || '';
+    const srcAttr = iconEl && iconEl.attributes && iconEl.attributes.src;
+    const iconMatch = (typeof srcAttr === 'string' && srcAttr.match(/([^\\\/\:\*\?\"\<\>\|])+$/));
+    const icon = (iconMatch && iconMatch[0]) ? iconMatch[0].replace('.jpg', '') : '';
 
-    const result = {
-      name: html.querySelector('.apphub_AppName').innerHTML,
-      icon: html.querySelector('.apphub_AppIcon img').attributes.src.match(/([^\\\/\:\*\?\"\<\>\|])+$/)[0].replace(".jpg","")
-    };
-       
-    return result;   
-    
+    const result = { name, icon };
+    return result;
   } catch {
     return {};
   }

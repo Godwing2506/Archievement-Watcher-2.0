@@ -17,46 +17,82 @@ const files = {
     "Achievements.Bin",
     "achieve.dat",
     "Achievements.ini",
-    "stats.bin" 
+    "stats.bin",
+    "remote/achievements.ini",
+    "remote/achievements.json",
+    "Stats/achievements.ini",
+    "tenoke.ini",
+    "rune.ini",
+    "data.ini",
+    "save.ini"
   ],
-  steamEmu: ["ALI213.ini", "valve.ini", "hlm.ini", "ds.ini", "steam_api.ini", "SteamConfig.ini"]
+  steamEmu: ["ALI213.ini", "valve.ini", "hlm.ini", "ds.ini", "steam_api.ini", "SteamConfig.ini", "tenoke.ini", "rune.ini"]
 }
 
 module.exports.getFolders = async (userDir_file) => {
 
+  const achievementFiles = [
+    "achievements.ini",
+    "achievements.json",
+    "achiev.ini",
+    "stats.ini",
+    "Achievements.Bin",
+    "achieve.dat",
+    "Achievements.ini",
+    "stats.bin",
+    "remote/achievements.ini",
+    "remote/achievements.json",
+    "Stats/achievements.ini",
+    "tenoke.ini",
+    "rune.ini",
+    "data.ini",
+    "save.ini"
+  ];
+
   let steamEmu = [
     { 
       dir: path.join(process.env['Public'],"Documents/Steam/CODEX"), 
-      options: { recursive: true, filter: /([0-9]+)/, file: [files.achievement[0]] } 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
     },
     { 
-      dir: path.join(process.env['APPDATA'],"Steam/CODEX"), 
-      options: { recursive: true, filter: /([0-9]+)/, file: [files.achievement[0]] } 
+      dir: path.join(process.env['Public'],"Documents/Steam/RUNE"), 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
+    },
+    { 
+      dir: path.join(process.env['Public'],"Documents/Steam/TENOKE"), 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
+    },
+    { 
+      dir: path.join(process.env['Public'],"Documents/Steam/DOGE"), 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
+    },
+    { 
+      dir: path.join(process.env['Public'],"Documents/Steam/Fairlight"), 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
+    },
+    { 
+      dir: path.join(process.env['Public'],"Documents/Steam/Goldberg SteamEmu Saves"), 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
     },
     { 
       dir: path.join(process.env['APPDATA'],"Goldberg SteamEmu Saves"), 
-      options: { recursive: true, filter: /([0-9]+)/, file: [files.achievement[1],files.achievement[0]] } //keeping "achievements.ini" [0] for backward compatibility with custom goldberg emu build
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
     },
     { 
       dir: path.join(process.env['APPDATA'],"EMPRESS"), 
-      options: { recursive: true, filter: /([0-9]+)\\remote\\([0-9]+)/, file: [files.achievement[1]] }
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
     },
     { 
       dir: path.join(process.env['Public'],"Documents/EMPRESS"), 
-      options: { recursive: true, filter: /([0-9]+)\\remote\\([0-9]+)/, file: [files.achievement[1]] }
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
     },
     { 
-      dir: path.join(process.env['PROGRAMDATA'],"Steam"), 
-      options: { disableCheckIfProcessIsRunning: true, disableCheckTimestamp: true, recursive: true, filter: /([0-9]+)\\stats/, file: [files.achievement[0]] } 
-      //3DM doesn't need override (disableCheckIfProcessIsRunning,disableCheckTimestamp) ...
-    },
-    {
       dir: path.join(process.env['LOCALAPPDATA'],"SKIDROW"), 
-      options: { recursive: true, filter: /([0-9]+)/, file: [files.achievement[5]] }
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
     },
     { 
       dir: path.join(process.env['APPDATA'],"SmartSteamEmu"), 
-      options: { recursive: true, filter: /([0-9]+)/, file: [files.achievement[7]] }
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
     }
   ];
 
@@ -183,7 +219,7 @@ module.exports.getFolders = async (userDir_file) => {
 
                   }
              } else {
-                steamEmu.push({ dir: dir.path, options: {recursive: true, filter: /([0-9]+)/, file: files.achievement} }); 
+                steamEmu.push({ dir: dir.path, options: {recursive: true, filter: /([0-9]+)/, file: files.achievement, disableCheckTimestamp: true} });
              }
         
         }catch(err){
@@ -199,10 +235,11 @@ module.exports.getFolders = async (userDir_file) => {
   
 }
 
-module.exports.parse = async (filePath) => {
+module.exports.parse = async (filePath, appId, lang) => {
     try {
     
       const filter = ["SteamAchievements","Steam64","Steam"];
+      const runeStats = require('./statsIniAchievements.js');
       
       let local;
       let file = path.parse(filePath);
@@ -211,10 +248,27 @@ module.exports.parse = async (filePath) => {
       } else if (file.base == "stats.bin"){
         local = sse.parse(await fs.readFile(filePath));
       } else {
-        local = ini.parse(await fs.readFile(filePath,"utf8"));
+        const buffer = await fs.readFile(filePath);
+        let content;
+        if (buffer[0] === 0xFF && buffer[1] === 0xFE) {
+          content = buffer.toString('utf16le');
+        } else if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+          content = buffer.toString('utf8').slice(1);
+        } else {
+          content = buffer.toString('utf8');
+        }
+        
+        try {
+          local = ini.parse(content);
+        } catch (e) {
+          local = {};
+        }
       }
-      
-      if (local.AchievementsUnlockTimes && local.Achievements) { //hoodlum
+
+      const fromStats = appId ? runeStats.statsLocalToAchievements(local, appId, lang) : null;
+      if (fromStats) {
+        local = fromStats;
+      } else if (local.AchievementsUnlockTimes && local.Achievements) { //hoodlum
         let convert = {};
         for (let i in local.Achievements) {
           if(Object.prototype.hasOwnProperty.call(local.Achievements,i)){
@@ -228,14 +282,67 @@ module.exports.parse = async (filePath) => {
         let convert = {};
         for (let i in local.State) {
           if(Object.prototype.hasOwnProperty.call(local.State,i)){
-            if (local.local.State[i] == "0101") {
+            if (local.State[i] == "0101") {
               convert[`${i}`] = { Achieved: "1", UnlockTime: new DataView(new Uint8Array(Buffer.from(local.Time[i].toString(),'hex')).buffer).getUint32(0, true) || null };
             }
           }
         }
         local = convert;
       } else {
-        local = omit(local.ACHIEVE_DATA || local, filter);
+        const goldbergUser = (() => {
+          if (!local || typeof local !== "object" || Array.isArray(local)) return null;
+          const reserved = new Set(["SteamAchievements", "Steam64", "Steam"]);
+          const keys = Object.keys(local).filter((k) => !reserved.has(k));
+          if (keys.length === 0) return null;
+          const looksLikeGoldberg = keys.every((k) => {
+            const entry = local[k];
+            return entry && typeof entry === "object" &&
+              (entry.earned !== undefined || entry.progress !== undefined || entry.max_progress !== undefined);
+          });
+          if (!looksLikeGoldberg) return null;
+          const converted = {};
+          for (const name of keys) {
+            const entry = local[name];
+            converted[name] = {
+              Achieved: entry.earned ? 1 : 0,
+              UnlockTime: entry.earned_time || entry.UnlockTime || 0,
+              CurProgress: entry.progress || 0,
+              MaxProgress: entry.max_progress || 0
+            };
+          }
+          return converted;
+        })();
+
+        if (goldbergUser) {
+          local = goldbergUser;
+        } else {
+        // ORIGINAL y SEGURO para instalador: primero el clásico
+        let processed = omit(local, filter);
+        
+        // Si el clásico NO DA NADA, probamos nuevas secciones (para juegos como Quarantine Zone)
+        if (Object.keys(processed).length === 0) {
+          const modernRaw = local.ACHIEVE_DATA || local.Achievements || local.SteamAchievements;
+          if (modernRaw) {
+            processed = omit(modernRaw, filter);
+          }
+        }
+        
+        // Si aún está vacío, probamos una última cosa: tal vez las claves son directamente sin secciones
+        if (Object.keys(processed).length === 0) {
+          for (let key in local) {
+            if (Object.prototype.hasOwnProperty.call(local, key)) {
+              const val = local[key];
+              if (typeof val === 'object' && val !== null && 
+                  (val.Achieved !== undefined || val.achieved !== undefined || val.earned !== undefined ||
+                   val.State !== undefined || val.UnlockTime !== undefined || val.progress !== undefined)) {
+                processed[key] = val;
+              }
+            }
+          }
+        }
+        
+        local = processed;
+        }
       }
       
       let achievements = [];

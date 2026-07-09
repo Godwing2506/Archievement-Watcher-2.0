@@ -1,6 +1,5 @@
-; BEAUMONT Anthony
-; Xan
-; 10-03-2019
+; Manuel Diaz
+; 2026
 ; ---------------------------------
 ; Achievement Watcher
 ; ---------------------------------
@@ -8,12 +7,12 @@
 [Setup]
 #define AppUserModelID "io.github.xan105.achievement.watcher"
 #define AppName "Achievement Watcher"
-#define OurVersion "1.6.8"
-#define Author "Anthony Beaumont"
-#define Website "https://github.com/xan105/Achievement-Watcher"
+#define OurVersion "2.0"
+#define Author "Manuel Diaz"
+#define Website "https://github.com/Godwing2509/Archivement-Watcher"
 #define DonationURL "https://www.paypal.me/xan105"
 #define VersionURL "https://github.com/xan105/Achievement-Watcher/raw/master/setup/version.ini"
-#define Copyright "� 2019-2022"
+#define Copyright "© 2026"
 
 ; xp, vista, win7, win8, win8.1, win10
 #define MinWin "win7"
@@ -36,14 +35,15 @@ VersionInfoDescription={#AppName}
 DefaultDirName={pf}\{#AppName}
   DirExistsWarning=no
 DefaultGroupName={#AppName}
-Compression=lzma2/max
+Compression=lzma2/ultra64
 ;Compression=none
 DiskSpanning=no
   SlicesPerDisk=3
   DiskSliceSize=1566000000
 OutputDir=_dist_\
   OutputBaseFilename={#OutputFileName}
-SolidCompression=no
+SolidCompression=yes
+LZMAUseSeparateProcess=yes
 AllowRootDirectory=yes
 DisableWelcomePage=no
 DisableReadyPage=yes
@@ -62,13 +62,29 @@ ArchitecturesAllowed=x64
 CloseApplications=force
 
 [Languages]
+; Español como idioma principal de instalación (Español latino / Spain según sistema)
+Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
-WelcomeLabel1={#AppName} %nSetup Wizard
-FinishedHeadingLabel={#AppName} %nSetup Wizard
+WelcomeLabel1={#AppName} %nAsistente de instalación
+FinishedHeadingLabel={#AppName} %nAsistente de instalación
 
 [CustomMessages]
+es.InstallingLabel=Instalando %1, espere ...
+es.UninstallProgram=Desinstalar %1
+es.ErrorMinWin=%1 requiere una versión más reciente de Windows
+es.Options=Opciones
+es.CreateDesktopIcon=Crear icono en el escritorio
+es.CreateStartMenu=Crear entrada en el menú Inicio
+es.CreateUninstaller=Crear desinstalador
+es.StartWithWindows=Iniciar con Windows (ejecuta la app al iniciar sesión)
+es.ButtonDonate=Donar
+es.Finishing=Finalizando ...
+es.Redist=VCRuntime 2015-2019 ...
+es.DirectX=DirectX Runtime ...
+es.ErrorShouldUpgrade=Debe actualizar su sistema operativo.
+es.UpdateNotice=Hay una versión más reciente de este instalador en
 en.InstallingLabel=Installing %1, please wait ...
 en.UninstallProgram=Uninstall %1
 en.ErrorMinWin=%1 requires a newer version of Windows
@@ -77,29 +93,34 @@ en.Options=Options
 en.CreateDesktopIcon=Create Desktop icon
 en.CreateStartMenu=Create Start Menu entry
 en.CreateUninstaller=Create Uninstaller
+en.StartWithWindows=Start with Windows (runs app at login)
 en.ButtonDonate=Donate
 en.UpdateNotice=A newer version of this setup is available at
 en.Finishing=Finishing ...
 en.Redist=VCRuntime 2015-2019 ...
 en.DirectX=DirectX Runtime ...
 
-#include <idp.iss>
+#include "idp.iss"
 
 [Files]
-Source: "resources\avatar*.bmp"; DestDir: "{tmp}" ;Flags: dontcopy;
 Source: "resources\warning.bmp"; DestDir: "{tmp}" ;Flags: dontcopy;
-Source: "resources\curl.exe"; DestDir: "{tmp}" ; Flags: dontcopy;
-Source: "..\app\node_modules\electron\dist\*"; Excludes: "\electron.exe,\LICENSE,\version,\resources\default_app.asar"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;   
+; Electron dist — se excluyen locales no usados (~35 MB), electron.exe se renombra por rcedit
+Source: "..\app\node_modules\electron\dist\*"; Excludes: "\electron.exe,\LICENSE,\version,\resources\default_app.asar,\locales"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;
+; Locales de Electron: solo es, en-US, en-GB (idiomas soportados por la app)
+Source: "..\app\node_modules\electron\dist\locales\es.pak";    DestDir: "{app}\locales"; Flags: ignoreversion overwritereadonly;
+Source: "..\app\node_modules\electron\dist\locales\es-419.pak"; DestDir: "{app}\locales"; Flags: ignoreversion overwritereadonly;
+Source: "..\app\node_modules\electron\dist\locales\en-US.pak"; DestDir: "{app}\locales"; Flags: ignoreversion overwritereadonly;
+Source: "..\app\node_modules\electron\dist\locales\en-GB.pak"; DestDir: "{app}\locales"; Flags: ignoreversion overwritereadonly;
 Source: "..\service\*"; Excludes: "\buildme.cmd,\watchdog\_wip_,\watchdog\patches"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;
 Source: "{{app}}\*"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;
-Source: "{{appData}}\*"; DestDir: "{userappdata}\Achievement Watcher\steam_cache\schema"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs;
-Source: "winmedia\*"; DestDir: "{win}\media"; Flags: ignoreversion overwritereadonly;
+Source: "{{appData}}\options.ini"; DestDir: "{userappdata}\Achievement Watcher\cfg"; Flags: onlyifdoesntexist;
+Source: "{{appData}}\appList.json"; DestDir: "{userappdata}\Achievement Watcher\steam_cache\schema"; Flags: onlyifdoesntexist;
 Source: "redist\microsoft\*"; DestDir: "{tmp}\redist" ; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;
 Source: "redist\growl\*"; DestDir: "{tmp}\redist" ; Flags: ignoreversion overwritereadonly; 
     
 [Icons]
 Name: "{commondesktop}\{#AppName}"; Filename: "{#AppMain}"; WorkingDir: "{#AppWorkingDir}"; IconFilename: "{#AppIcon}"; Check: GetOption('CreateDesktopIcon');
-Name: "{commonstartup}\{#AppName}"; Filename: "{app}\nw\nw.exe"; Parameters: "-config watchdog.json"; WorkingDir: "{#AppWorkingDir}"; IconFilename: "{#AppIcon}";
+Name: "{commonstartup}\{#AppName}"; Filename: "{#AppMain}"; Parameters: "--startup"; WorkingDir: "{#AppWorkingDir}"; IconFilename: "{#AppIcon}"; Check: GetOption('StartWithWindows');
 Name: "{group}\{#AppName}"; Filename: "{#AppMain}"; WorkingDir: "{#AppWorkingDir}"; IconFilename: "{#AppIcon}"; AppUserModelID: "{#AppUserModelID}"; Check: GetOption('CreateStartMenu');
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"; WorkingDir: "{app}\__unins__"; Check: GetOption('CreateStartMenu') and GetOption('CreateUninstaller');
 
@@ -112,9 +133,8 @@ Filename: "{tmp}\redist\directx\DXSETUP.exe"; Parameters: "/silent"; WorkingDir:
 Filename: "{cmd}"; Parameters: "/c SCHTASKS /Create /F /TN ""Achievement Watcher Upgrade Daily"" /RL HIGHEST /SC DAILY /RI 60 /DU 24:00 /TR ""\""{app}\nw\nw.exe\"" -config updater.json"""; WorkingDir: "{app}"; StatusMsg: "{cm:Finishing}"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{cmd}"; Parameters: "/c Netsh.exe advfirewall firewall add rule name=""Achievement Watchdog"" program=""{app}\node\node.exe"" protocol=tcp dir=in enable=yes action=allow profile=Private"; WorkingDir: "{app}"; StatusMsg: "{cm:Finishing}"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{cmd}"; Parameters: "/c regsvr32 /s virtual-audio-capturer.dll"; WorkingDir: "{app}\loopback"; StatusMsg: "{cm:Finishing}"; Flags: runhidden waituntilterminated skipifdoesntexist
-Filename: "{app}\nw\nw.exe"; Parameters: "-config watchdog.json"; WorkingDir: "{#AppWorkingDir}\nw"; StatusMsg: "{cm:Finishing}"; Flags: runasoriginaluser runhidden nowait skipifdoesntexist
 ;PostInstall Checkbox
-Filename: "{#AppMain}"; WorkingDir: "{#AppWorkingDir}"; Description: "Run {#AppName}"; Flags: runasoriginaluser postinstall nowait skipifsilent skipifdoesntexist unchecked
+Filename: "{#AppMain}"; WorkingDir: "{#AppWorkingDir}"; Description: "Run {#AppName}"; Flags: runasoriginaluser postinstall nowait skipifsilent skipifdoesntexist
 Filename: "msiexec.exe"; Parameters: "/i ""Growl_v2.0.msi"" "; WorkingDir: "{tmp}\redist"; Description: "Install Growl For Windows ? (Recommended for Win7)"; Flags: runasoriginaluser postinstall skipifsilent skipifdoesntexist unchecked;
 
 [UninstallDelete]
@@ -197,8 +217,8 @@ var
   BitmapFileName: String;
   Image: TBitmapImage;
 begin
-  BitmapFileName := ExpandConstant('{tmp}\'+Format('avatar%s.bmp', [GetScalingFactor]));
-  ExtractTemporaryFile(ExtractFileName(BitmapFileName));
+  BitmapFileName := ExpandConstant('{tmp}\\warning.bmp');
+  ExtractTemporaryFile('warning.bmp');
   Image := TBitmapImage.Create(WizardForm);
   Image.Bitmap.LoadFromFile(BitmapFileName);
   Image.AutoSize := True;
@@ -295,7 +315,7 @@ begin
 
 end;
 
-var CreateStartMenu, CreateDesktopIcon, CreateUninstaller : TNewCheckBox;
+var CreateStartMenu, CreateDesktopIcon, CreateUninstaller, StartWithWindows : TNewCheckBox;
 
 function GetOption (option: string) : boolean;
 begin
@@ -307,6 +327,8 @@ begin
         Result:= CreateDesktopIcon.checked;
     end else if option = 'CreateUninstaller' then begin
         Result:= CreateUninstaller.checked;
+    end else if option = 'StartWithWindows' then begin
+        Result:= StartWithWindows.checked;
     end;
 end;
 
@@ -343,6 +365,14 @@ CreateUninstaller.Left := ScaleX(20);
 CreateUninstaller.Width := WizardForm.SelectDirPage.Width;
 CreateUninstaller.Caption := ExpandConstant(' {cm:CreateUninstaller}.');
 CreateUninstaller.Checked := True;
+
+StartWithWindows := TNewCheckBox.Create(WizardForm);
+StartWithWindows.Parent := WizardForm.SelectDirPage;
+StartWithWindows.Top := CreateUninstaller.Top + ScaleY(20);
+StartWithWindows.Left := ScaleX(20);
+StartWithWindows.Width := WizardForm.SelectDirPage.Width;
+StartWithWindows.Caption := ExpandConstant(' {cm:StartWithWindows}.');
+StartWithWindows.Checked := False;
 
 end;
 
@@ -607,9 +637,10 @@ end;
 procedure InitializeWizard();
 begin
     CreateCopyright;
-    if not WizardSilent then begin
+    { Skipping remote version check to avoid requiring curl.exe at install time }
+    { if not WizardSilent then begin
       IsThisLastestVersion;
-    end;
+    end; }
     ModifyWizardSelectDirPage;
     ModifyWizardInstallingPage;                                 
 end;

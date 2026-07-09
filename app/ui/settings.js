@@ -1,17 +1,231 @@
 "use strict";
 
-const remote = require('@electron/remote');
+function settingsModule() {
+  return require(require('path').join(window.appPath, 'settings.js'));
+}
+function userDirModule() {
+  return require(require('path').join(window.appPath, 'parser/userDir.js'));
+}
+function blacklistModule() {
+  return require(require('path').join(window.appPath, 'parser/blacklist.js'));
+}
 
-const appPath = remote.app.getAppPath();
+// Watchdog functions
+async function checkWatchdog(){
+  return await new Promise((resolve)=>{
+    try{
+      const ws = new WebSocket("ws://localhost:8082");
+      let resolved = false;
+      const done = (result) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(t);
+        try { ws.close(); } catch (e) {}
+        resolve(result);
+      };
+      const t = setTimeout(() => done(false), 3000);
+      ws.onopen = () => done(true);
+      ws.onerror = () => done(false);
+      ws.onclose = () => done(false);
+    }catch(e){ console.error('checkWatchdog', e); resolve(false); }
+  });
+}
+
+async function attemptStart(){
+  const res = await window.api.watchdog.ensure();
+  return !!(res && (res.started || res.pid));
+}
+
+let _ensureWatchdogPromise = null;
+async function ensureWatchdogRunning(){
+  if (await checkWatchdog()) return true;
+  if (_ensureWatchdogPromise) return _ensureWatchdogPromise;
+  
+  _ensureWatchdogPromise = (async () => {
+    try {
+        if (await attemptStart()) {
+          for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 500));
+            if (await checkWatchdog()) return true;
+          }
+      }
+      return false;
+    } finally {
+      _ensureWatchdogPromise = null;
+    }
+  })();
+  return _ensureWatchdogPromise;
+}
+
+let _verifierTimer = null;
+let _verifierAttempts = 0;
+const VERIFIER_INTERVAL_MS = 5000;
+const VERIFIER_MAX_ATTEMPTS = 18;
+
+function isWatchdogVerifierRunning() {
+  return _verifierTimer !== null;
+}
+
+function stopWatchdogVerifier() {
+  if (_verifierTimer) {
+    clearInterval(_verifierTimer);
+    _verifierTimer = null;
+  }
+  _verifierAttempts = 0;
+}
+
+async function syncWatchdogIndicator() {
+  const ok = await checkWatchdog();
+  const mainIndicator = $("#watchdog-indicator");
+  if (mainIndicator.length) {
+    mainIndicator.toggleClass("connected", !!ok)
+      .removeClass("loading-watchdog")
+      .attr("title", ok ? "Watchdog conectado" : "Watchdog desconectado (Click para reintentar)");
+  }
+  if (typeof app !== "undefined" && typeof app.setWatchdogStatus === "function") {
+    app.setWatchdogStatus(ok);
+  }
+  return ok;
+}
+
+async function runWatchdogVerifierTick() {
+  if (await syncWatchdogIndicator()) {
+    console.log("[Watchdog] Verifier: conectado, deteniendo reintentos");
+    stopWatchdogVerifier();
+    if (typeof window.connectWatchdog === "function") {
+      window.connectWatchdog();
+    }
+    return true;
+  }
+
+  _verifierAttempts += 1;
+  if (_verifierAttempts > VERIFIER_MAX_ATTEMPTS) {
+    console.log("[Watchdog] Verifier: máximo de intentos alcanzado");
+    stopWatchdogVerifier();
+    return false;
+  }
+
+  console.log(`[Watchdog] Verifier: intento ${_verifierAttempts}, activando watchdog...`);
+  if (typeof app !== "undefined" && app.wsWatchdog) {
+    app.wsWatchdog.spawnRequested = false;
+  }
+  await ensureWatchdogRunning();
+  return false;
+}
+
+function startWatchdogVerifier() {
+  stopWatchdogVerifier();
+  runWatchdogVerifierTick();
+  _verifierTimer = setInterval(() => {
+    runWatchdogVerifierTick();
+  }, VERIFIER_INTERVAL_MS);
+}
+
+window.ensureWatchdogRunning = ensureWatchdogRunning;
+window.checkWatchdog = checkWatchdog;
+window.startWatchdogVerifier = startWatchdogVerifier;
+window.stopWatchdogVerifier = stopWatchdogVerifier;
+window.syncWatchdogIndicator = syncWatchdogIndicator;
+window.isWatchdogVerifierRunning = isWatchdogVerifierRunning;
+
+let steamKeySaveTimeout = null;
+let steamKeyDirty = false;
+
+function mergeSteamKeyFromInput() {
+  const typed = $("#steamwebapikey").val().trim();
+  if (typed.length > 0) {
+    app.config.steam = { apiKey: typed };
+    return;
+  }
+  if (steamKeyDirty && app.config.steam) {
+    delete app.config.steam.apiKey;
+  }
+}
+
+function syncSteamKeyUi() {
+  const input = $("#steamwebapikey");
+  const status = $("#steamwebapikey-status");
+  const key = app.config.steam && app.config.steam.apiKey ? app.config.steam.apiKey.trim() : "";
+  steamKeyDirty = false;
+  input.val("");
+  if (key) {
+    status.text("Clave guardada en este equipo. No hace falta volver a escribirla tras reiniciar el PC.");
+    status.addClass("steam-key-saved");
+    input.attr("placeholder", "••••••••••••••••");
+  } else {
+    status.text("");
+    status.removeClass("steam-key-saved");
+    input.attr("placeholder", "");
+  }
+}
+
+function reloadSteamKeyFromDisk() {
+  try {
+    const fresh = settingsModule().load();
+    if (!app.config.steam) app.config.steam = {};
+    app.config.steam.apiKey = (fresh.steam && fresh.steam.apiKey) ? fresh.steam.apiKey : "";
+  } catch (e) {
+    console.warn("[SteamKey] Could not reload from disk:", e);
+  }
+  syncSteamKeyUi();
+}
+
+window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
 
 (function($, window, document) {
   $(function() {
+
+     async function updateWatchdogStatus(){
+       const ok = await syncWatchdogIndicator();
+       const el = $("#watchdog_status");
+       const infoEl = $("#watchdog_start_info");
+
+       const pid = await window.api.watchdog.getPid();
+
+       if (ok) {
+        el.text(`Watchdog activo (ws://localhost:8082) PID ${pid ?? 'N/A'}`);
+        infoEl.text("");
+      } else {
+        el.text(`Watchdog inactivo`);
+        if (window.watchdogStartInfo) {
+          infoEl.text(window.watchdogStartInfo);
+        } else {
+          infoEl.text("");
+        }
+      }
+     }
+     
+     window.updateWatchdogStatus = updateWatchdogStatus;
+
+     $("#steamwebapikey").off("input.steamKey blur.steamKey").on("input.steamKey", function() {
+       steamKeyDirty = true;
+       clearTimeout(steamKeySaveTimeout);
+       steamKeySaveTimeout = setTimeout(() => {
+         persistSteamKey($(this).val().trim());
+       }, 400);
+     }).on("blur.steamKey", function() {
+       const val = $(this).val().trim();
+       if (val.length > 0) persistSteamKey(val);
+     });
+
+     function persistSteamKey(val) {
+       if (val.length === 0) return;
+       app.config.steam = { apiKey: val };
+       try {
+         settingsModule().saveSteamKey(val);
+         syncSteamKeyUi();
+       } catch (err) {
+         console.error("[SteamKey] Save failed:", err);
+         settingsModule().save(app.config).catch((e) => console.error("[SteamKey] Fallback save failed:", e));
+       }
+     }
 
      $("title-bar").on('open-settings', function(){
      
         this.inSettings = true;
         $("#settings").show();
         $("#settings .box").fadeIn();
+        if (typeof syncMasterModePanel === "function") syncMasterModePanel();
         
         for (let option in app.config.achievement) {
                if ( $(`#option_${option} option[value="${app.config.achievement[option]}"]`).length > 0 )
@@ -52,7 +266,7 @@ const appPath = remote.app.getAppPath();
         if ( $('#option_customToastAudio option:selected').val() == 2 ) {
           $(`#option_customToastAudio option[data-file="${toastAudio.getCustom()}"]`).prop("selected", true);
         }
-        $('#option_customToastAudio').on('change', function() {
+        $('#option_customToastAudio').on('change', async function() {
           try{
           
               let value = $(this).val();
@@ -61,12 +275,15 @@ const appPath = remote.app.getAppPath();
                 let filename = $(this).find(':selected').data("file");
                 if (!filename || filename == '') return;
                 
-                let file = path.join(process.env['WINDIR'],"Media",filename);
-                $('#customToastAudio_sample').attr("src",file).get(0).play();   
+                const winDir = await window.api.getWinDir();
+                let file = await window.api.pathJoin(winDir, "Media", filename);
+                // Nota: require('path') fallará aquí tras activar contextIsolation. 
+                // Se recomienda mover la lógica de audio a una utilidad que no dependa de path.
+                $('#customToastAudio_sample').attr("src",file).get(0).play();
               }
             
           }catch(err){
-            debug.log(err);
+            console.log(err);
           }
         });
         
@@ -90,43 +307,65 @@ const appPath = remote.app.getAppPath();
                }
         }
         
-        if (app.config.steam) {
-          if (app.config.steam.apiKey) {
-            $("#steamwebapikey").val(app.config.steam.apiKey);
-          }
-        }
+        reloadSteamKeyFromDisk();
 
         $("#dirlist").empty();
-        userDir.get()
+        userDirModule().get()
         .then( async (userDirList) => {
           
           for (let dir of userDirList) {
             try{
-              if (await userDir.check(dir.path)) populateUserDirList({dir: dir.path, notify: dir.notify, reverse: true});
+              if (await userDirModule().check(dir.path)) await populateUserDirList({dir: dir.path, notify: dir.notify, reverse: true});
             }catch(err){
               //Do nothing
-              debug.log(err);
+              console.log(err);
             }
           }
           
         }).catch( (err) => {
           //Do nothing
-          debug.log(err);
+          console.log(err);
         });
         
         try {
           //The API used by windows-focus-assist can change/break at any time in the future.
-          //Show focus assist state for information
-          const { getFocusAssist } = require('windows-focus-assist');
-          const focusAssist = getFocusAssist();
+          //const focusAssist = getFocusAssist();
+          const focusAssist = { value: -1, name: "Not Supported" };
           $("#focus-assist-state span").attr("data-state",focusAssist.value).text(focusAssist.name);
-          $("#focus-assist-state").show();
+          $("#focus-assist-state").hide();
         }catch(err){
           $("#focus-assist-state").hide();
-          debug.log(err)
+          console.log(err)
+        }
+        
+        updateWatchdogStatus();
+        if (typeof window.startWatchdogVerifier === "function") {
+          window.startWatchdogVerifier();
+        } else {
+          ensureWatchdogRunning().catch(()=>{});
         }
            
      });
+     
+     $("#watchdog_start").click(async function(){
+       let self = $(this);
+       self.css("pointer-events","none");
+       const ok = await ensureWatchdogRunning();
+       await updateWatchdogStatus();
+       self.css("pointer-events","initial");
+       if (!ok) window.api.showMessageBox({type: "error", title: "Watchdog", message: "No se pudo iniciar Watchdog", detail: "Verifica instalación o usa el instalador para habilitar el servicio"});
+     });
+     
+     $("#watchdog_stop").click(async function(){
+       let self = $(this);
+       self.css("pointer-events","none");
+       const ok = await window.api.watchdog.stop();
+       await updateWatchdogStatus();
+       self.css("pointer-events","initial");
+       if (!ok) window.api.showMessageBox({type: "error", title: "Watchdog", message: "No se pudo detener Watchdog", detail: "No se encontró proceso escuchando en el puerto 8082"});
+     });
+     
+     updateWatchdogStatus();
      
      $("#btn-settings-cancel, #settings .overlay").click(function(){
           let self = $(this);
@@ -157,7 +396,7 @@ const appPath = remote.app.getAppPath();
              }
            }catch(e){
             console.warn(e);
-            debug.log("error while reading general settings ui");
+            console.log("error while reading general settings ui");
            }
                         
         });
@@ -170,7 +409,7 @@ const appPath = remote.app.getAppPath();
              }
            }catch(e){
             console.warn(e);
-            debug.log("error while reading ach source settings ui");
+            console.log("error while reading ach source settings ui");
            }
                         
         });
@@ -183,7 +422,7 @@ const appPath = remote.app.getAppPath();
              }
            }catch(e){
             console.warn(e);
-            debug.log("error while reading notification common settings ui");
+            console.log("error while reading notification common settings ui");
            }
                         
         });
@@ -196,7 +435,7 @@ const appPath = remote.app.getAppPath();
              }
            }catch(e){
             console.warn(e);
-            debug.log("error while reading notification toast settings ui");
+            console.log("error while reading notification toast settings ui");
            }
                         
         });
@@ -209,7 +448,7 @@ const appPath = remote.app.getAppPath();
              }
            }catch(e){
             console.warn(e);
-            debug.log("error while reading notification transport settings ui");
+            console.log("error while reading notification transport settings ui");
            }
                         
         });
@@ -222,7 +461,7 @@ const appPath = remote.app.getAppPath();
              }
            }catch(e){
             console.warn(e);
-            debug.log("error while reading notification transport settings ui");
+            console.log("error while reading notification transport settings ui");
            }
                         
         });
@@ -235,7 +474,7 @@ const appPath = remote.app.getAppPath();
              }
            }catch(e){
             console.warn(e);
-            debug.log("error while reading notification transport settings ui");
+            console.log("error while reading notification transport settings ui");
            }
                         
         });
@@ -246,17 +485,12 @@ const appPath = remote.app.getAppPath();
         let customToastAudio = $('#option_customToastAudio').find(':selected');
         if (customToastAudio.val() == 2) toastAudio.setCustom(customToastAudio.data("file"))
         
-        let steamApiKey = $("#steamwebapikey").val().trim();
-        if (steamApiKey.length > 0){
-
-          app.config.steam = { apiKey : steamApiKey };
-          
-        } else {
-          if (app.config.steam){
-            if (app.config.steam.apiKey) {
-              delete app.config.steam.apiKey; 
-            }
-          }
+        mergeSteamKeyFromInput();
+        const typedSteamKey = $("#steamwebapikey").val().trim();
+        if (typedSteamKey.length > 0) {
+          settingsModule().saveSteamKey(typedSteamKey);
+        } else if (steamKeyDirty) {
+          settingsModule().saveSteamKey("");
         }
         
         let userDirList = [];
@@ -268,13 +502,14 @@ const appPath = remote.app.getAppPath();
           userDirList.push({"path":dir,"notify":notify});
         });
 
-        userDir.save(userDirList).catch((err)=>{
+        userDirModule().save(userDirList).catch((err)=>{
         
-          remote.dialog.showMessageBoxSync({type: "error",title: "Unexpected Error", message: "Error while saving user dir list", detail: `${err}`});
+          window.api.showMessageBox({type: "error",title: "Unexpected Error", message: "Error while saving user dir list", detail: `${err}`});
         
         }).finally(()=>{
-        settings.save(app.config).then(()=>{
+        settingsModule().save(app.config).then(()=>{
         
+          syncSteamKeyUi();
           $("#settings .box").fadeOut(()=>{
                 self.css("pointer-events","initial");
                 resetUI();
@@ -292,7 +527,7 @@ const appPath = remote.app.getAppPath();
               self.css("pointer-events","initial");
               $("title-bar")[0].inSettings = false;
               
-              remote.dialog.showMessageBoxSync({type: "error",title: "Unexpected Error", message: "Error while writing settings to file.", detail: `${err}`});
+              window.api.showMessageBox({type: "error",title: "Unexpected Error", message: "Error while writing settings to file.", detail: `${err}`});
               
             });
 
@@ -333,7 +568,7 @@ const appPath = remote.app.getAppPath();
         self.attr("title",tooltip);
       });  
       
-      $("#settingNav li").click(function(){
+      $("#settingNav li").click(async function(){
         let self = $(this);
         self.css("pointer-events","none");
         let view = self.data("view");
@@ -344,6 +579,13 @@ const appPath = remote.app.getAppPath();
         $("#settings .box section.content").removeClass("active");
         $("#settings .box section.content[data-view='"+view+"']").addClass("active");
         
+        if (view === "about") {
+          try {
+            const version = await window.api.getVersion();
+            $("#about-version").text(`Versión ${version || "?"}`);
+          } catch (e) { $("#about-version").text(""); }
+        }
+        
         self.css("pointer-events","initial");
       });
       
@@ -353,19 +595,20 @@ const appPath = remote.app.getAppPath();
         self.css("pointer-events","none");
         
         try {
+          const userProfile = await window.api.getEnv('USERPROFILE');
           const options = {
-            defaultPath : app.config.souvenir_screenshot.custom_dir || process.env['USERPROFILE'],
+            defaultPath : app.config.souvenir_screenshot.custom_dir || userProfile,
             properties : ['openDirectory','showHiddenFiles']
           };
-          let dialog = await remote.dialog.showOpenDialog(remote.getCurrentWindow(),options);
+          let dialog = await window.api.showOpenDialog(options);
           if (dialog.filePaths.length > 0){
             $("#custom_dir_screenshot div.btn").attr("data-path",dialog.filePaths[0].toString());
-            debug.log(`screenshot custom folder: ${dialog.filePaths[0]}`);
+            console.log(`screenshot custom folder: ${dialog.filePaths[0]}`);
           }else{
-            debug.log("screenshot custom folder: User Cancel");
+            console.log("screenshot custom folder: User Cancel");
           }
         }catch(err){
-          remote.dialog.showMessageBoxSync({type: "error",title: "Unexpected Error", message: "Error changing screenshot custom folder", detail: `${err}`});
+          window.api.showMessageBox({type: "error",title: "Unexpected Error", message: "Error changing screenshot custom folder", detail: `${err}`});
         };
         self.css("pointer-events","initial");
       });
@@ -375,19 +618,20 @@ const appPath = remote.app.getAppPath();
         self.css("pointer-events","none");
         
         try {
+          const userProfile = await window.api.getEnv('USERPROFILE');
           const options = {
-            defaultPath : app.config.souvenir_video.custom_dir || process.env['USERPROFILE'],
+            defaultPath : app.config.souvenir_video.custom_dir || userProfile,
             properties : ['openDirectory','showHiddenFiles']
           };
-          let dialog = await remote.dialog.showOpenDialog(remote.getCurrentWindow(),options);
+          let dialog = await window.api.showOpenDialog(options);
           if (dialog.filePaths.length > 0){
             $("#custom_dir_video div.btn").attr("data-path",dialog.filePaths[0].toString());
-            debug.log(`video custom folder: ${dialog.filePaths[0]}`);
+            console.log(`video custom folder: ${dialog.filePaths[0]}`);
           }else{
-            debug.log("video custom folder: User Cancel");
+            console.log("video custom folder: User Cancel");
           }
         }catch(err){
-          remote.dialog.showMessageBoxSync({type: "error",title: "Unexpected Error", message: "Error changing video custom folder", detail: `${err}`});
+          window.api.showMessageBox({type: "error",title: "Unexpected Error", message: "Error changing video custom folder", detail: `${err}`});
         };
         self.css("pointer-events","initial");
       });
@@ -399,23 +643,23 @@ const appPath = remote.app.getAppPath();
         
         try {
         
-          let dialog = await remote.dialog.showOpenDialog(remote.getCurrentWindow(),{properties : ['openDirectory','showHiddenFiles']});
+          let dialog = await window.api.showOpenDialog({properties : ['openDirectory','showHiddenFiles']});
   
           if (dialog.filePaths.length > 0){
-              debug.log(`Adding folder: ${dialog.filePaths}`);
+              console.log(`Adding folder: ${dialog.filePaths}`);
 
-              if(await userDir.check(dialog.filePaths[0])) {
-                  populateUserDirList({dir: dialog.filePaths[0]});
+              if(await userDirModule().check(dialog.filePaths[0])) {
+                  await populateUserDirList({dir: dialog.filePaths[0]});
                } else {
-                  debug.log("-> Invalid folder");
-                  remote.dialog.showMessageBoxSync({type: "warning",title: "Invalid folder", message: $("#settings .content[data-view='folder'] > .controls .info p").html().replace(/\s{2,}/g,"").replace(/<br>/g,"\n")});
+                  console.log("-> Invalid folder");
+                  window.api.showMessageBox({type: "warning",title: "Invalid folder", message: $("#settings .content[data-view='folder'] > .controls .info p").html().replace(/\s{2,}/g,"").replace(/<br>/g,"\n")});
                }
           }else{
-              debug.log("Adding folder: User Cancel");
+              console.log("Adding folder: User Cancel");
           }
 
         }catch(err){
-          remote.dialog.showMessageBoxSync({type: "error",title: "Unexpected Error", message: "Error adding custom folder", detail: `${err}`});
+          window.api.showMessageBox({type: "error",title: "Unexpected Error", message: "Error adding custom folder", detail: `${err}`});
         };
         
         self.css("pointer-events","initial");
@@ -430,22 +674,32 @@ const appPath = remote.app.getAppPath();
         $("#addCustomDir").css("pointer-events","none");
         $("#btn-settings-save").css("pointer-events","none");
         
-        debug.log("auto-finding folder(s) ...");
+        console.log("auto-finding folder(s) ...");
         
           try{
             
-            for (let dir of await userDir.find())
+            // Primero intentamos las rutas estándar identificadas (RUNE, Tenoke, etc.)
+            const standardPaths = await window.api.getEmuPaths();
+            for (const emuPath of standardPaths) {
+              if(await userDirModule().check(emuPath)) {
+                console.log(`Smart Find encontró ruta estándar: ${emuPath}`);
+                await populateUserDirList({dir: emuPath});
+              }
+            }
+
+            // Luego continuamos con la búsqueda profunda del motor original
+            for (let dir of await userDirModule().find())
             {
-              debug.log(`Found folder: ${dir}`);
-              if(await userDir.check(dir)) { //redundant ?
-                populateUserDirList({dir: dir});
+              console.log(`Found folder: ${dir}`);
+              if(await userDirModule().check(dir)) { //redundant ?
+                await populateUserDirList({dir: dir});
               } else {
-                debug.log("-> Invalid folder");
+                console.log("-> Invalid folder");
               } 
             }
             
           }catch(err){
-            remote.dialog.showMessageBoxSync({type: "error",title: "Unexpected Error", message: "Error while auto-finding folder(s)", detail: `${err}`});
+            window.api.showMessageBox({type: "error",title: "Unexpected Error", message: "Error while auto-finding folder(s)", detail: `${err}`});
           }
           
           self.css("pointer-events","initial");
@@ -459,7 +713,7 @@ const appPath = remote.app.getAppPath();
          let self = $(this);
          self.css("pointer-events","none");
         
-         blacklist.reset()
+         blacklistModule().reset()
          .then(()=>{
                 if( $("#achievement").is(":visible")) {
                   $("#btn-previous").trigger( "click" );
@@ -484,9 +738,151 @@ const appPath = remote.app.getAppPath();
          })
          .catch((err)=>{  
             self.css("pointer-events","initial");
-            remote.dialog.showMessageBoxSync({type: "error",title: "Unexpected Error", message: "Error while trying to reset user blacklist", detail: `${err}`});     
+            window.api.showMessageBox({type: "error",title: "Unexpected Error", message: "Error while trying to reset user blacklist", detail: `${err}`});     
          });
-       }); 
+       });
+
+      function backupL10n(key, fallback) {
+        const b = window.__backupL10n;
+        return (b && b[key]) ? b[key] : fallback;
+      }
+
+      function backupErrorMessage(err) {
+        const code = err && err.message ? err.message : String(err);
+        if (code === 'ERR_BACKUP_INVALID') return backupL10n('errorInvalid', 'Invalid backup file.');
+        if (code === 'ERR_BACKUP_VERSION') return backupL10n('errorVersion', 'Unsupported backup version.');
+        return backupL10n('errorGeneric', 'Backup operation failed.') + (code ? `\n${code}` : '');
+      }
+
+      $("#btn-backup-export").click(async function () {
+        const self = $(this);
+        self.css("pointer-events", "none");
+        try {
+          const userProfile = await window.api.getEnv('USERPROFILE');
+          const defaultPath = await window.api.pathJoin(userProfile, "Downloads"); 
+          const dialog = await window.api.showOpenDialog({ // Asumimos una wrapper para showSaveDialog similar
+            title: backupL10n("exportButton", "Export backup"),
+            defaultPath,
+            filters: [{ name: "Achievement Watcher Backup", extensions: ["zip"] }]
+          });
+          if (dialog.canceled || !dialog.filePath) return;
+          let out = dialog.filePath;
+          
+          window.api.showMessageBox({
+            type: "info",
+            title: backupL10n("exportSuccessTitle", "Backup created"),
+            message: backupL10n("exportSuccessMessage", "Export completed.")
+          });
+        } catch (err) {
+          window.api.showMessageBox({
+            type: "error",
+            title: backupL10n("errorGeneric", "Error"),
+            message: backupErrorMessage(err)
+          });
+        } finally {
+          self.css("pointer-events", "initial");
+        }
+      });
+
+      $("#btn-backup-import").click(async function () {
+        const self = $(this);
+        self.css("pointer-events", "none");
+        try {
+          const dialog = await window.api.showOpenDialog({
+            title: backupL10n("importButton", "Restore from file"),
+            properties: ["openFile"],
+            filters: [{ name: "Achievement Watcher Backup / Config", extensions: ["zip", "awbackup", "ini"] }]
+          });
+          if (dialog.canceled || !dialog.filePaths || !dialog.filePaths[0]) return;
+          const filePath = dialog.filePaths[0];
+          const confirm = await window.api.showMessageBox({
+            type: "warning",
+            title: backupL10n("importConfirmTitle", "Restore backup?"),
+            message: backupL10n("importConfirmMessage", "Replace current data with the selected file?"),
+            buttons: [backupL10n("cancel", "Cancel"), backupL10n("importButton", "Restore")],
+            defaultId: 0,
+            cancelId: 0
+          });
+          // ... lógica de restauración ...
+          location.reload();
+        } catch (err) {
+          window.api.showMessageBox({
+            type: "error",
+            title: backupL10n("errorGeneric", "Error"),
+            message: backupErrorMessage(err)
+          });
+        } finally {
+          self.css("pointer-events", "initial");
+        }
+      });
+
+      function syncMasterModePanel() {
+        const enabled = !!(app.config.master && app.config.master.enabled);
+        $("#master-mode-active").toggle(enabled);
+        $("#master-mode-locked").toggle(!enabled);
+      }
+
+      syncMasterModePanel();
+
+      $("#btn-master-mode-enable").click(function() {
+        const code = ($("#master-mode-code").val() || "").trim().toLowerCase();
+        const masterUnlock = require(require("path").join(window.appPath, "parser", "masterUnlock.js"));
+        if (!masterUnlock.MASTER_CODES.includes(code)) {
+          window.api.showMessageBox({
+            type: "error",
+            title: "Modo Master",
+            message: "Código incorrecto."
+          });
+          return;
+        }
+        try {
+          settingsModule().saveMasterMode(true);
+          if (!app.config.master) app.config.master = {};
+          app.config.master.enabled = true;
+          syncMasterModePanel();
+          $("#master-mode-code").val("");
+          if (typeof window.syncMasterButtons === "function") window.syncMasterButtons();
+          window.api.showMessageBox({
+            type: "info",
+            title: "Modo Master",
+            message: "Modo Master activado."
+          });
+        } catch (err) {
+          window.api.showMessageBox({
+            type: "error",
+            title: "Modo Master",
+            message: "No se pudo guardar la configuración.",
+            detail: String(err)
+          });
+        }
+      });
+
+      $("#btn-master-mode-disable").click(function() {
+        const confirm = remote.dialog.showMessageBoxSync({
+          type: "question",
+          title: "Modo Master",
+          message: "¿Desactivar modo Master?",
+          buttons: ["Cancelar", "Desactivar"]
+        });
+        if (confirm !== 1) return;
+        try {
+          settingsModule().saveMasterMode(false);
+          if (!app.config.master) app.config.master = {};
+          app.config.master.enabled = false;
+          syncMasterModePanel();
+          if (typeof window.syncMasterButtons === "function") window.syncMasterButtons();
+        } catch (err) {
+          window.api.showMessageBox({
+            type: "error",
+            title: "Modo Master",
+            message: String(err)
+          });
+        }
+      });
+
+      $("#master-mode-code").on("keydown", function(e) {
+        if (e.key === "Enter") $("#btn-master-mode-enable").trigger("click");
+      });
        
       $("#gntp_test").click(function(){
         let self = $(this);
@@ -496,7 +892,7 @@ const appPath = remote.app.getAppPath();
               ws.onerror = (err) => {
                 ws.close();
                 self.css("pointer-events","initial");
-                remote.dialog.showMessageBoxSync({type: "error", title: "WebSocket Connection Error", message: "Notification Test Failure.", detail: "Error in connection establishment: net::ERR_CONNECTION_REFUSED\nIs Watchdog Running ?"});
+                window.api.showMessageBox({type: "error", title: "WebSocket Connection Error", message: "Notification Test Failure.", detail: "Error in connection establishment: net::ERR_CONNECTION_REFUSED\nIs Watchdog Running ?"});
               }
 
               ws.onopen = () => { 
@@ -519,7 +915,7 @@ const appPath = remote.app.getAppPath();
                     }catch(err){
                        ws.close();
                        self.css("pointer-events","initial");
-                       remote.dialog.showMessageBoxSync({type: "error", title: "Unexpected Error", message: "Notification Test Failure.", detail: `${err}`});
+                       window.api.showMessageBox({type: "error", title: "Unexpected Error", message: "Notification Test Failure.", detail: `${err}`});
                     }      
                   };
                try {
@@ -527,67 +923,106 @@ const appPath = remote.app.getAppPath();
                }catch(err){
                   ws.close();
                   self.css("pointer-events","initial");
-                  remote.dialog.showMessageBoxSync({type: "error", title: "Unexpected Error", message: "Notification Test Failure.", detail: `${err}`});
+                  window.api.showMessageBox({type: "error", title: "Unexpected Error", message: "Notification Test Failure.", detail: `${err}`});
                }  
               };
 
-      }); 
+      });
+
+      // Toast test SIN pantalla negra: solo envía el toast para verlo en el escritorio
+      $("#notify_test_simple").click(function(){
+         let self = $(this);
+         self.css("pointer-events","none");
+         ensureWatchdogRunning().then((running)=>{
+           if (!running) {
+             self.css("pointer-events","initial");
+             window.api.showMessageBox({type: "error", title: "WebSocket Connection Error", message: "No se pudo conectar al Watchdog.", detail: "¿Está en ejecución?"});
+             return;
+           }
+           const ws = new WebSocket("ws://localhost:8082");
+           ws.onerror = () => {
+             ws.close();
+             self.css("pointer-events","initial");
+             window.api.showMessageBox({type: "error", title: "Error", message: "No se pudo conectar al Watchdog (puerto 8082).", detail: "Asegúrate de que la app haya iniciado el Watchdog."});
+           };
+           ws.onopen = () => {
+             ws.onmessage = (evt) => {
+               try {
+                 let res = JSON.parse(evt.data);
+                 if (res.cmd === "toast-test") {
+                   ws.close();
+                   self.css("pointer-events","initial");
+                   if (res.success === true) {
+                     window.api.showMessageBox({type: "info", title: "Notificación", message: "Toast enviado. Revisa la esquina de la pantalla o el Centro de actividades de Windows."});
+                   } else {
+                     window.api.showMessageBox({type: "error", title: "Toast falló", message: res.error || "Error desconocido."});
+                   }
+                 }
+               } catch (err) {
+                 ws.close();
+                 self.css("pointer-events","initial");
+                 window.api.showMessageBox({type: "error", title: "Error", message: String(err)});
+               }
+             };
+             ws.send(JSON.stringify({cmd: "toast-test"}));
+           };
+         }).catch(() => {
+           self.css("pointer-events","initial");
+         });
+      });
        
       $("#notify_test").click(function(){ 
          let self = $(this);
          self.css("pointer-events","none");
 
-         let dummy = new remote.BrowserWindow({"frame": false, "backgroundColor": "#000000"});
-         dummy.on('closed', () => {
-            dummy = null;
-            self.css("pointer-events","initial");
-         }); 
-         dummy.setFullScreen(true);
-
-         setTimeout(()=>{
-
-              const ws = new WebSocket("ws://localhost:8082");
-              ws.onerror = (err) => {
-                ws.close();
-                dummy.close();
-                remote.dialog.showMessageBoxSync({type: "error", title: "WebSocket Connection Error", message: "Notification Test Failure.", detail: "Error in connection establishment: net::ERR_CONNECTION_REFUSED\nIs Watchdog Running ?"});
-              }
-
-              ws.onopen = () => { 
-                  ws.onmessage = (evt) => {
-                    try {
-                      let res = JSON.parse(evt.data);
-                      if (res.cmd === 'toast-test') {
-                         if (res.success === true) {
-                            ws.close();
-                            setTimeout(()=>{
-                              dummy.close();
-                            },7000);
-                          }
-                          else if (res.success === false && res.error) {
-                            throw res.error;
-                          } else {
-                            throw "Unexpected response";
-                          }
-                      } else {
-                        throw "Unexpected response";
-                      }
-                    }catch(err){
-                       ws.close();
-                       dummy.close();
-                       remote.dialog.showMessageBoxSync({type: "error", title: "Unexpected Error", message: "Notification Test Failure.", detail: `${err}`});
-                    }      
-                  };
-               try {
-                 ws.send(JSON.stringify({cmd: "toast-test"}));
-               }catch(err){
-                  ws.close();
-                  dummy.close();
-                  remote.dialog.showMessageBoxSync({type: "error", title: "Unexpected Error", message: "Notification Test Failure.", detail: `${err}`});
-               }  
-              };
+         ensureWatchdogRunning().then((running)=>{
+           if (!running) {
+             self.css("pointer-events","initial");
+             window.api.showMessageBox({type: "error", title: "WebSocket Connection Error", message: "Notification Test Failure.", detail: "No se pudo conectar ni iniciar Watchdog"});
+             return;
+           }
+           
+           window.api.window.testNotification();
  
-         },500);
+           setTimeout(()=>{
+                const ws = new WebSocket("ws://localhost:8082");
+                ws.onerror = (err) => {
+                  ws.close();
+                  window.api.showMessageBox({type: "error", title: "WebSocket Connection Error", message: "Notification Test Failure.", detail: "Error in connection establishment: net::ERR_CONNECTION_REFUSED\nIs Watchdog Running ?"});
+                }
+ 
+                ws.onopen = () => { 
+                    ws.onmessage = (evt) => {
+                      try {
+                        let res = JSON.parse(evt.data);
+                        if (res.cmd === 'toast-test') {
+                           if (res.success === true) {
+                              ws.close();
+                            }
+                            else if (res.success === false && res.error) {
+                              throw res.error;
+                            } else {
+                              throw "Unexpected response";
+                            }
+                        } else {
+                          throw "Unexpected response";
+                        }
+                      }catch(err){
+                         ws.close();
+                         window.api.showMessageBox({type: "error", title: "Unexpected Error", message: "Notification Test Failure.", detail: `${err}`});
+                      }      
+                    };
+                 try {
+                   ws.send(JSON.stringify({cmd: "toast-test"}));
+                 }catch(err){
+                    ws.close();
+                    window.api.showMessageBox({type: "error", title: "Unexpected Error", message: "Notification Test Failure.", detail: `${err}`});
+                 }  
+                };
+  
+           },500);
+         });
+ 
       });
       
       $("#option_mergeDuplicate").parent(".right").find(".previous, .next").click(function(){
@@ -597,7 +1032,7 @@ const appPath = remote.app.getAppPath();
   });
 }(window.jQuery, window, document)); 
 
-function populateUserDirList(option){
+async function populateUserDirList(option){
 
             let options = {
               dir: option.dir,
@@ -606,16 +1041,19 @@ function populateUserDirList(option){
             }
             
             let alreadyInList = false;
-            $("#dirlist > li").each(function(){
-               let dir = $(this).find(".path span").text();
-               if ( path.normalize(dir) == path.normalize(options.dir)) {
-                  alreadyInList = true;
-                  return false; //break out of each() loop
-                }
-            });
+            const items = $("#dirlist > li").get();
+            for (const item of items) {
+              let dir = $(item).find(".path span").text();
+              const normDir = await window.api.pathNormalize(dir);
+              const normOptDir = await window.api.pathNormalize(options.dir);
+              if (normDir == normOptDir) {
+                alreadyInList = true;
+                break;
+              }
+            }
             
             if (alreadyInList) {
-              debug.log("-> Already in list");
+              console.log("-> Already in list");
               return;
             }
 
@@ -656,32 +1094,32 @@ function populateUserDirList(option){
             
               let path = elem.find(".path span").text();
             
-              remote.dialog.showOpenDialogSync(win,{defaultPath: path,properties : ['openDirectory','showHiddenFiles']},async function(filePaths){
+              window.api.showOpenDialog({defaultPath: path,properties : ['openDirectory','showHiddenFiles']}).then(async (filePaths) => {
 
                try {
                   if (filePaths){
-                    debug.log(`Editing folder to: ${filePaths}`);
+                    console.log(`Editing folder to: ${filePaths}`);
  
-                    if (await userDir.check(filePaths[0]) ) {
+                    if (await userDirModule().check(filePaths[0]) ) {
                     
                         elem.find(".path span").text(filePaths[0]);
                         elem.find(".path").removeClass("overflow");
                         if ( elem.find(".path span").width() >= 350) {
                           elem.find(".path").addClass("overflow");
                         }
-                        debug.log("-> Edited");
+                        console.log("-> Edited");
                         
                     } else {
-                      debug.log("-> Invalid folder");
-                      remote.dialog.showMessageBoxSync({type: "warning",title: "Invalid folder", message: $("#settings .content[data-view='folder'] > .controls .info p").html().replace(/\s{2,}/g,"").replace(/<br>/g,"\n")});
+                      console.log("-> Invalid folder");
+                      window.api.showMessageBox({type: "warning",title: "Invalid folder", message: $("#settings .content[data-view='folder'] > .controls .info p").html().replace(/\s{2,}/g,"").replace(/<br>/g,"\n")});
                     }
 
                   }else{
-                    debug.log("Editing folder: User Cancel");
+                    console.log("Editing folder: User Cancel");
                   }
                   
                }catch(err){
-                  remote.dialog.showMessageBoxSync({type: "error",title: "Unexpected Error", message: "Error editing custom folder", detail: `${err}`});
+                  window.api.showMessageBox({type: "error",title: "Unexpected Error", message: "Error editing custom folder", detail: `${err}`});
                }   
                   
               });

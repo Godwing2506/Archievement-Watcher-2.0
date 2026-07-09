@@ -20,12 +20,24 @@ const notify = require("./notification/toaster.js");
 const debug = require("./util/log.js");
 const { crc32 } = require('crc');
 const { isWinRTAvailable } = require('powertoast');
-const { isFullscreenAppRunning } = require('./queryUserNotificationState.js');
+
+let isFullscreenAppRunning;
+try {
+  isFullscreenAppRunning = require('./queryUserNotificationState.js').isFullscreenAppRunning;
+} catch(err) {
+  debug.warn('Could not load fullscreen app detection (native module), using fallback');
+  isFullscreenAppRunning = async () => false;
+}
 
 const cfg_file = {
   option: path.join(process.env['APPDATA'],"Achievement Watcher/cfg","options.ini"),
   userDir: path.join(process.env['APPDATA'],"Achievement Watcher/cfg","userdir.db")
-}
+};
+
+const steamPollPaths = [
+  path.join(process.env['APPDATA'], "Achievement Watcher", "cfg", "steam_poll.json"),
+  path.join(process.env['APPDATA'], "Achievement-Watcher", "cfg", "steam_poll.json")
+];
 
 var app = { 
   isRecording: false,
@@ -33,18 +45,24 @@ var app = {
   options : {},
   watcher: [],
   tick: 0,
-  toastID: "Microsoft.XboxApp_8wekyb3d8bbwe!Microsoft.XboxApp",
+  toastID: "Achievement-Watcher",
+  steamPollIntervalId: null,
+  steamPollRunning: false,
   start: async function() {
    try{
      let self = this;
      self.cache = [];
+     if (self.steamPollIntervalId) {
+       clearInterval(self.steamPollIntervalId);
+       self.steamPollIntervalId = null;
+     }
       
      debug.log("Achievement Watchdog starting ...");
      
-     processPriority.set("high priority").then(()=>{
-        debug.log("Process priority set to HIGH")
+     processPriority.set("above normal").then(()=>{
+        debug.log("Process priority set to ABOVE NORMAL")
      }).catch((err) => { 
-        debug.error("Fail to set process priority to HIGH");
+        debug.error("Fail to set process priority to ABOVE NORMAL");
      }); 
 
      debug.log("Loading Options ...");
@@ -107,7 +125,14 @@ var app = {
         }catch(err){
           debug.log(err);
         }
-     } 
+     }
+
+     if (self.options.notification.notify && self.options.notification.notifySteamLegit) {
+       const intervalSec = Math.max(30, self.options.notification_advanced.steamPollInterval || 60);
+       self.steamPollIntervalId = setInterval(() => { self.steamPoll().catch(() => {}); }, intervalSec * 1000);
+       setTimeout(() => { self.steamPoll().catch(() => {}); }, 5000);
+       debug.log(`Steam (legit) notification polling every ${intervalSec}s`);
+     }
       
     }catch(err){
       debug.error(err);
@@ -126,24 +151,80 @@ var app = {
         
         const currentTime = Date.now();
 		const fileLastModified = (await fs.stats(name)).mtimeMs || 0;
-		if ( (currentTime - fileLastModified) > 1000) return;
+		if ( (currentTime - fileLastModified) > 15000) return; // Increased to 15s for slower writes
         
         let filePath = path.parse(name);
-        if (!options.file.some(file => file == filePath.base)) return;
+        if (!options.file.some(file => file == filePath.base)) {
+           // Check for case-insensitive match just in case
+           if (!options.file.some(file => file.toLowerCase() == filePath.base.toLowerCase())) return;
+        }
         
-        debug.log("achievement file change detected");
+        debug.log(`Achievement file change detected: ${name}`);
 
         if (moment().diff(moment(self.tick)) <= self.options.notification_advanced.tick) throw "Spamming protection is enabled > SKIPPING";
         self.tick = moment().valueOf();
         
         let appID;
         try{
-          appID = (options.appid) ? options.appid : filePath.dir.replace(/(\\stats$)|(\\SteamEmu$)|(\\SteamEmu\\UserStats$)/g,"").match(/([0-9]+$)/g)[0];
+          if (options.appid) {
+            appID = options.appid;
+          } else {
+            // 1. Try to find AppID in the path
+            const cleanPath = filePath.dir.replace(/(\\stats$)|(\\SteamEmu$)|(\\SteamEmu\\UserStats$)|(\\remote$)|(\\local$)/g,"");
+            const matches = cleanPath.match(/([0-9]+)/g);
+            if (matches && matches.length > 0) {
+              appID = matches[matches.length - 1]; 
+            } else {
+              // 2. Try to find a config file in parent folders to get AppID
+              const iniFiles = ["steam_emu.ini", "SteamConfig.ini", "valve.ini", "tenoke.ini", "RUNE.ini", "flt.ini", "Achievements.ini"];
+              let currentDir = filePath.dir;
+              for (let i = 0; i < 5; i++) { // search up to 5 levels up
+                for (const iniFile of iniFiles) {
+                  const iniPath = path.join(currentDir, iniFile);
+                  if (await fs.exists(iniPath)) {
+                    try {
+                      const content = await fs.readFile(iniPath, "utf8");
+                      const parsed = (require("@xan105/ini")).parse(content);
+                      const foundId = parsed.Settings?.AppId || parsed.Settings?.AppID || parsed.GameSettings?.AppId || parsed.GameSettings?.AppID;
+                      if (foundId) {
+                        appID = foundId;
+                        break;
+                      }
+                    } catch (e) {}
+                  }
+                }
+                if (appID) break;
+                currentDir = path.dirname(currentDir);
+              }
+            }
+            
+            // 3. Last resort: check if AppId is INSIDE the achievement file (some emus do this)
+            if (!appID && filePath.ext === ".ini") {
+              try {
+                const content = await fs.readFile(name, "utf8");
+                const parsed = (require("@xan105/ini")).parse(content);
+                appID = parsed.SteamAchievements?.AppId || parsed.Steam?.AppId || parsed.Achievements?.AppId;
+              } catch (e) {}
+            }
+
+            if (!appID) throw "No numeric AppID found in path or config files";
+          }
         }catch(err){
-          throw "Unable to find game's appID";
+          debug.log(`Watchdog detection error for ${name}: ${err}`);
+          return; // Skip instead of throwing to keep watcher alive
         }
-        
+
+        debug.log(`Processing achievements for AppID: ${appID} from file: ${filePath.base}`);
         let game = await self.load(appID);
+        if (!game || !game.achievement || !game.achievement.list || game.achievement.list.length === 0) {
+          debug.log(`No achievement schema found for AppID ${appID}. Refreshing...`);
+          // Try one more time to force load from Steam
+          game = await self.load(appID, true); // true to ignore cache if I had that param
+          if (!game || !game.achievement || !game.achievement.list || game.achievement.list.length === 0) {
+            debug.log(`Still no schema for ${appID}. Notifications will not work.`);
+            return;
+          }
+        }
         
         let isRunning = false;
         
@@ -182,7 +263,7 @@ var app = {
 
         if (isRunning) {
           
-          let achievements = await monitor.parse(name);
+          let achievements = await monitor.parse(name, appID, self.options.achievement.lang);
           
           if (achievements.length > 0) {
             
@@ -217,9 +298,12 @@ var app = {
                        if (!previous.Achieved && achievements[i].Achieved) {
 
                            if (!achievements[i].UnlockTime || achievements[i].UnlockTime == 0) achievements[i].UnlockTime = moment().unix();
-                           let elapsedTime = moment().diff(moment.unix(achievements[i].UnlockTime), 'seconds');
-                           if (options.disableCheckTimestamp || (elapsedTime >= 0 && elapsedTime <= self.options.notification_advanced.timeTreshold)) {
-                              
+                           const ts = achievements[i].UnlockTime;
+                           const momentTs = (ts > 1e11) ? moment(ts) : moment.unix(ts);
+                           let elapsedTime = moment().diff(momentTs, 'seconds');
+                           const timeOk = options.disableCheckTimestamp || (elapsedTime >= 0 && elapsedTime <= self.options.notification_advanced.timeTreshold);
+                           if (timeOk) {
+                              if (options.disableCheckTimestamp) debug.log("[Emu] timestamp check skipped (disableCheckTimestamp)");
                               debug.log("Unlocked:"+ ach.displayName);
 
                   try{
@@ -286,7 +370,7 @@ var app = {
                                       
                               j+=1;
                            } else {
-                              debug.warn("Outatime:"+ ach.displayName)
+                              debug.warn("Outatime:"+ ach.displayName + " (elapsed " + elapsedTime + "s > " + self.options.notification_advanced.timeTreshold + "s)");
                            }
                        } else if (previous.Achieved && achievements[i].Achieved){
                        
@@ -316,7 +400,7 @@ var app = {
 							      websocket: self.options.notification_transport.websocket
 								},
 								toast: {
-								  appid: self.toastID,
+									appid: self.toastID,
 							      winrt: self.options.notification_transport.winRT,
 								  balloonFallback: self.options.notification_transport.balloon,
 								  customAudio: 0,
@@ -354,7 +438,85 @@ var app = {
       }
     });
   },
-  load : async function(appID){
+  steamPoll: async function() {
+    const self = this;
+    if (self.steamPollRunning) return;
+    let list = [];
+    for (const p of steamPollPaths) {
+      try {
+        if (await fs.exists(p)) {
+          list = JSON.parse(await fs.readFile(p, "utf8"));
+          break;
+        }
+      } catch (e) { /* try next path */ }
+    }
+    if (!Array.isArray(list) || list.length === 0) {
+      return;
+    }
+    debug.log("Steam poll: " + list.length + " game(s)");
+    self.steamPollRunning = true;
+    try {
+      for (const { appid, steamId64 } of list) {
+        try {
+          const apiKey = (self.options.steam && self.options.steam.apiKey) ? self.options.steam.apiKey : "";
+          const current = await steam.getPlayerAchievements(steamId64, appid, apiKey);
+          const previous = await track.loadSteam(appid, steamId64);
+          if (previous.length === 0) {
+            await track.saveSteam(appid, steamId64, current);
+            continue;
+          }
+          let j = 0;
+          for (const achievement of current) {
+            if (!achievement.Achieved) continue;
+            const prev = previous.find((a) => a.name === achievement.name);
+            if (prev && prev.Achieved) continue;
+            const game = await self.load(appid);
+            const ach = game.achievement.list.find((a) => a.name === achievement.name || (a.name && a.name.toUpperCase() === (achievement.name || "").toUpperCase()));
+            if (!ach) continue;
+            const unlockTime = achievement.UnlockTime || moment().unix();
+            debug.log("Unlocked (Steam): " + ach.displayName);
+            await notify({
+              appid: game.appid,
+              gameDisplayName: game.name,
+              achievementName: ach.name,
+              achievementDisplayName: ach.displayName,
+              achievementDescription: ach.description,
+              icon: ach.icon,
+              time: unlockTime,
+              delay: j
+            }, {
+              notify: self.options.notification.notify,
+              transport: {
+                toast: self.options.notification_transport.toast,
+                gntp: self.options.notification_transport.gntp,
+                websocket: self.options.notification_transport.websocket
+              },
+              toast: {
+                appid: self.toastID,
+                winrt: self.options.notification_transport.winRT,
+                balloonFallback: self.options.notification_transport.balloon,
+                customAudio: self.options.notification_toast.customToastAudio,
+                imageIntegration: self.options.notification_toast.toastSouvenir,
+                group: self.options.notification_toast.groupToast,
+                attribution: "Achievement"
+              },
+              prefetch: self.options.notification_advanced.iconPrefetch,
+              souvenir: { screenshot: false, video: 0 },
+              rumble: self.options.notification.rumble
+            });
+            j += 1;
+          }
+          await track.saveSteam(appid, steamId64, current);
+        } catch (err) {
+          const msg = (err && err.message) ? err.message : String(err);
+          debug.warn("Steam poll " + appid + ": " + msg);
+        }
+      }
+    } finally {
+      self.steamPollRunning = false;
+    }
+  },
+  load : async function(appID, force = false){
     try {
     
       let self = this;
@@ -364,12 +526,18 @@ var app = {
       let search = self.cache.find(game => game.appid == appID);
       let game;  
 
-      if (search) {
+      if (search && !force) {
         game = search;  
         debug.log("from memory cache");
       } else {
-        game = await steam.loadSteamData(appID,self.options.achievement.lang,self.options.steam.apiKey);
-        self.cache.push(game); 
+        const apiKey = (self.options.steam && self.options.steam.apiKey) ? self.options.steam.apiKey : "";
+        game = await steam.loadSteamData(appID, self.options.achievement.lang, apiKey, force);
+        if (search) {
+          const index = self.cache.indexOf(search);
+          self.cache[index] = game;
+        } else {
+          self.cache.push(game); 
+        }
         debug.log("from file cache or remote");  
       }
   
