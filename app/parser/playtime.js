@@ -1,6 +1,6 @@
 'use strict';
 
-const { promises : regedit } = require('regodit'); 
+const { promises : regedit } = require('../util/reg_shim'); 
 
 module.exports = async (appID) => {
     const current = +await regedit.RegQueryIntegerValue("HKCU","Software/Achievement Watcher/Playtime/Steam/" + appID,"total") || 0;

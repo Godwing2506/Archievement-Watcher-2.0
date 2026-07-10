@@ -204,6 +204,32 @@
       "blacklistTitle":"Lista negra de AppIDs",
       "blacklistButton":"Reiniciar lista negra",
       "blacklistInfo":"Clic derecho en cualquier cajón de juegos para agregarlo a la lista negra."
-    } 
+    },
+    "backup": {
+      "sideMenu": "Copia de seguridad",
+      "title": "Copia de seguridad y restauración",
+      "intro": "Todo el progreso se guarda solo en este PC. Exporta un archivo de copia para conservar ajustes y el registro de logros desbloqueados. Tras formatear o reinstalar la app, importa ese archivo para recuperar lo que tenías.",
+      "includesTitle": "El archivo de copia incluye:",
+      "includes": [
+        "Ajustes (options.ini, incluida la clave API de Steam cifrada)",
+        "Carpetas personalizadas y lista negra",
+        "Registro local de desbloqueos (notificaciones y progreso)",
+        "Cachés de usuario Steam / Uplay",
+        "Tiempo de juego registrado por Achievement Watcher (registro de Windows)"
+      ],
+      "exportButton": "Exportar copia de seguridad",
+      "exportHelp": "Guarda un archivo .awbackup.zip (por ejemplo en Descargas o un USB).",
+      "importButton": "Restaurar desde archivo",
+      "importHelp": "Sustituye los datos actuales de esta instalación. Puedes importar .awbackup.zip u options.ini para restaurar ajustes y progreso local.",
+      "exportSuccessTitle": "Copia creada",
+      "exportSuccessMessage": "Tus datos se exportaron correctamente.",
+      "importConfirmTitle": "¿Restaurar copia?",
+      "importConfirmMessage": "Los ajustes y el progreso local actuales serán reemplazados por la copia. ¿Continuar?",
+      "importSuccessTitle": "Copia restaurada",
+      "importSuccessMessage": "Datos restaurados. La app se recargará para aplicar los cambios.",
+      "errorInvalid": "El archivo no es una copia válida de Achievement Watcher.",
+      "errorVersion": "Esta copia usa un formato más nuevo. Actualiza la app e inténtalo de nuevo.",
+      "errorGeneric": "Error en la operación de copia de seguridad."
+    }
   } 
 }

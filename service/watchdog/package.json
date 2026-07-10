@@ -5,12 +5,13 @@
   "version": "2.3.4",
   "main": "watchdog.js",
   "engines": {
-    "node": "~14.0.0"
+    "node": "^20.0.0"
   },
   "scripts": {
     "start": "node watchdog.js",
     "clean": "npm prune --production",
-    "prepare": "patch-package"
+    "prepare": "patch-package",
+    "rebuild": "npm rebuild @nodert-win10-rs4/windows.data.xml.dom @nodert-win10-rs4/windows.ui.notifications"
   },
   "author": "Anthony Beaumont",
   "license": "LGPL-3.0-only",

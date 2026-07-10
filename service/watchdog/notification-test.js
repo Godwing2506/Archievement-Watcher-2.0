@@ -19,7 +19,7 @@ try {
     notifications : require('@nodert-win10-rs4/windows.ui.notifications')
   };
   if (!winRT.xml || !winRT.notifications) winRT = null;
-} catch {}
+} catch (e) { console.error('winRT init', e); }
 
 
 module.exports.toast = async() => {
@@ -38,7 +38,7 @@ module.exports.toast = async() => {
     }
 
     let payload = {
-        appID: "Microsoft.XboxApp_8wekyb3d8bbwe!Microsoft.XboxApp",
+        appID: "Achievement-Watcher",
         uniqueID: "TOAST_TEST",
         title: "Achievement Watcher",
         message: (options.notification.showDesc) ? `${message}\nHello World` : `${message}`,
@@ -56,56 +56,63 @@ module.exports.toast = async() => {
         payload.appID = options.notification_advanced.appID;
     } else if (win_ver[0] == '6' && ( win_ver[1] == '3' || win_ver[1] == '2') ) {
         payload.appID = "microsoft.XboxLIVEGames_8wekyb3d8bbwe!Microsoft.XboxLIVEGames";
-    } else if (hasXboxOverlay === true){
-        payload.appID = "Microsoft.XboxGamingOverlay_8wekyb3d8bbwe!App";
     }
 
-    try
-    {
-      await toast(payload); 
+    let toastSuccess = false;
+    try {
+      await toast(payload);
+      toastSuccess = true;
+    } catch(toastErr){
+        console.warn("[TOAST] Toast notification failed, trying fallback");
+        try {
+          await balloon({
+             title: payload.title,
+             message: (options.notification.showDesc) ? "Balloon Fallback\nHello World" : "Balloon Fallback",
+             ico: path.join(__dirname, "notification", "icon", "icon.ico")
+          });
+          toastSuccess = true;
+       } catch(balloonErr){
+          console.error("[BALLOON] Balloon notification also failed");
+          throw new Error(`Toast and Balloon both failed: ${toastErr.message}`);
+       }
     }
-    catch(err){
-        if(options.notification_transport.balloon) {
-           try{
-             await balloon({
-                title: payload.title,
-                message: (options.notification.showDesc) ? "Balloon Fallback\nHello World" : "Balloon Fallback",
-                ico: "./notification/icon/icon.ico"
-             });
-          }catch(err){
-             throw err;
-          }
-        } else {
-          throw err;
-        }
+
+    if(options.notification.rumble){ 
+      try {
+        xinput.rumble().catch(()=>{});
+      } catch(err) {
+        console.warn("[RUMBLE] Rumble failed but continuing");
+      }
     }
     
-    if(options.notification.rumble){ xinput.rumble().catch(()=>{}); }
-    
-  }catch(err){
+    if(toastSuccess) {
+      return {success: true, method: "toast"};
+    }
+
+  } catch(err){
     throw err;
   }
-}
+};
 
-module.exports.gntp = async() => {
-  try{
+module.exports.gntp = async () => {
+  try {
 
     const options = await settings.load(cfg_file);
 
-    if(await gntp.hasGrowl()) {
-        await gntp.send({
-                         title: "Achievement Watcher", 
-                         message: (options.notification.showDesc) ? "Grrr!\nHello World" : "Grrr!", 
-                         icon: "./notification/icon/icon.png"
-        });
-        
-       if(options.notification.rumble){ xinput.rumble().catch(()=>{}); }
-        
+    if (await gntp.hasGrowl()) {
+      await gntp.send({
+        title: "Achievement Watcher",
+        message: (options.notification.showDesc) ? "Grrr!\nHello World" : "Grrr!",
+        icon: "./notification/icon/icon.png"
+      });
+
+      if (options.notification.rumble) { xinput.rumble().catch(() => {}); }
+
     } else {
-      throw "GNTP endpoint unreachable!"
+      throw "GNTP endpoint unreachable!";
     }
 
-  }catch(err){
+  } catch(err) {
     throw err;
   }
-}
+};

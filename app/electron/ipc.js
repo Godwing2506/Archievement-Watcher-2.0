@@ -1,8 +1,11 @@
 'use strict';
 
-const { ipcMain } = require('electron');
+const { ipcMain, app } = require('electron');
 
 module.exports.window = (win) => {
+
+  ipcMain.handle('app-getAppPath', () => app.getAppPath());
+  ipcMain.handle('app-getPath', (event, name) => app.getPath(name));
 
   ipcMain.handle('win-close', async (event) => {
       win.close();

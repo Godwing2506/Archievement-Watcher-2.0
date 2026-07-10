@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const regedit = require('regodit');
+const regedit = require('./reg_shim');
 
 module.exports.getDefault = () => {
 

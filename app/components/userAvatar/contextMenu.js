@@ -7,7 +7,9 @@ const request = require('request-zero');
 const { selectFileDialog } = require("./selectFileDialog.js");
 const { getSteamPath, getSteamUsers } = require("../../parser/steam.js");
 
-const appPath = remote.app.getAppPath();
+const path = require("path");
+const resolveAppPath = require(path.join(__dirname, "../../util/resolveAppPath.js"));
+const appPath = resolveAppPath(remote);
 
 function contextMenu(e, position = null){
     

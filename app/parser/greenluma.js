@@ -1,6 +1,6 @@
 "use strict";
 
-const regedit = require('regodit');
+const regedit = require('../util/reg_shim');
 
 module.exports.scan = async() => {
   try {
@@ -26,10 +26,10 @@ module.exports.scan = async() => {
                               path: `SOFTWARE/GLR/AppID/${key}/Achievements`}
                         });
                }
-         }catch{}
+         } catch (e) { console.error('GreenLuma GLR reg', e); }
        }
     }
-    
+
     if(keys.gl2020){
       for (let key of keys.gl2020) 
       {
@@ -44,10 +44,10 @@ module.exports.scan = async() => {
                               path: `SOFTWARE/GL2020/AppID/${key}/Achievements`}
                         });
                }
-         }catch{}
+         } catch (e) { console.error('GreenLuma GL2020 reg', e); }
        }
     }
-    
+
     return data;
   
   }catch(err){

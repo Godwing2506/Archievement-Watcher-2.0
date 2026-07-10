@@ -69,8 +69,8 @@ How to build
 
 ### Prequisites:
 
-You will need Node.js 14.x in x64 with NPM installed.<br/>
-Innosetup 5 unicode with preprocessor and [Inno Download Plugin](https://mitrichsoftware.wordpress.com/inno-setup-tools/inno-download-plugin/) (building the setup)<br/>
+You will need **Node.js 20.x** (LTS) in x64 with NPM installed (used by app, watchdog and updater).<br/>
+**Inno Setup 6** unicode with preprocessor and [Inno Download Plugin](https://mitrichsoftware.wordpress.com/inno-setup-tools/inno-download-plugin/) (building the setup)<br/>
 
 For Node.js you globally need asar and json :<br/>
 ```
@@ -91,7 +91,7 @@ Use `buildme.cmd` in the root folder to build.
 + Most of the native code is now shipped as prebuilt binaries. If you want to compile them yourself I invit you to check out their corresponding repo.<br/>
 NB: Golang cgo requires a gcc compiler installed and set in PATH (recommended : http://tdm-gcc.tdragon.net/download).
 
-+ Innosetup is expected to be installed in `C:\Program Files (x86)\Inno Setup 5` if that is not the case then update `buildme.cmd` with the correct path.
++ Inno Setup 6 is expected at `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`. If not, set the path in `buildme.cmd` or use the INNO_PATH environment variable if supported.
 
 + If NPM gives you some trouble, try to delete every `package-lock.json`.
 

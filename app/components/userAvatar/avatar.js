@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const regedit = require('regodit');
+const regedit = require('../../util/reg_shim');
 const accountms = require('accountpicture-ms-extractor');
 
 async function imageFileToBase64(filePath){

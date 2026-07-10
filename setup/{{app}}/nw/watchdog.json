@@ -1,10 +1,19 @@
-{
-  "bin": "../node/node.exe",
-  "args": "watchdog",
-  "cwd": "../watchdog",
-  "env": ["NODE_SKIP_PLATFORM_CHECK=1"],
-  "fileCheck": [
-    {"sum": "02cd30da48078c3c7cee213891b0bfb013e33435245519de7e84b12750bcc072", "size": 56239104},
-    {"file": "../watchdog/watchdog.js", "sum": "62af044f185ea96f0ff3123c4e425320706a2d4824abae65027f34d706cfe886", "size": 17440}
-  ]
+﻿{
+    "bin":  "../node/node.exe",
+    "args":  "watchdog.js",
+    "cwd":  "../watchdog",
+    "env":  [
+                "NODE_SKIP_PLATFORM_CHECK=1"
+            ],
+    "fileCheck":  [
+                      {
+                          "sum":  "5da5e201155bb3ea99134b404180adebcfa696b0dbc09571d01a09ca5489f53e",
+                          "size":  70017688
+                      },
+                      {
+                          "size":  25556,
+                          "file":  "../watchdog/watchdog.js",
+                          "sum":  "3adad8182b2f7546337fcaae9e5904ab0de25ccb149f522818b87c8aa51512aa"
+                      }
+                  ]
 }

@@ -3,7 +3,8 @@
 const path = require("path");
 const fs = require("@xan105/fs");
 const userShellFolder = require("../util/userShellFolder.js");
-const videoCapture = require("@xan105/video-capture");
+let videoCapture = null;
+try { videoCapture = require("@xan105/video-capture"); } catch (e) { /* optional: native module may be missing */ }
 const screenshot = require("@xan105/screenshot");
 const toast = require("./transport/toast.js");
 const balloon = require("powerballoon");
@@ -48,7 +49,7 @@ module.exports = async (message, option = {}) => {
 			rumble: option.rumble != null ? option.rumble : true
 		};
 		
-		if (options.souvenir.video > 0 && videoIsRecording === false) {
+		if (options.souvenir.video > 0 && videoCapture && videoIsRecording === false) {
 			debug.log("Souvenir: video");
 			try {
 				const filePath = path.join(options.souvenir.video_options.custom_dir || userShellFolder["myvideo"],fs.win32.sanitizeFileName(message.gameDisplayName),fs.win32.sanitizeFileName(message.achievementDisplayName) + ".mp4");
@@ -124,21 +125,18 @@ module.exports = async (message, option = {}) => {
 			if (options.transport.toast){ 
 				debug.log("Toast notification");
 				try{
-					await toast(message,options) 
+					await toast(message,options);
 				}catch(err){
 					debug.error(err);
 					if (options.toast.balloonFallback) {
 						debug.warn("Fallback to balloon-tooltip");
 						try{
-							
 							let notification = {
 								title: message.achievementDisplayName,
-								message: message.achievementDescription || "Achievement unlocked !", //description can not be empty for a balloon
+								message: message.achievementDescription || "Achievement unlocked !",
 								ico: path.resolve("./notification/icon/icon.ico")
 							};
-							
 							if (message.progress) notification.message = `[ ${message.progress.current}/${message.progress.max} ]\n${message.achievementDescription}`;
-							
 							await balloon(notification);
 						}catch(err){ debug.error(err) }
 					}

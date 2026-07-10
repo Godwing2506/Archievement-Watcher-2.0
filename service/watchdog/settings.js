@@ -60,6 +60,11 @@ module.exports.load = async (cfg_file) => {
           fixFile = true;
         }
         
+        if (typeof options.achievement.autoTranslate !== "boolean"){
+          options.achievement.autoTranslate = false;
+          fixFile = true;
+        }
+        
         //Source
         
         if (options.achievement_source.legitSteam != 0 && options.achievement_source.legitSteam != 1 && options.achievement_source.legitSteam != 2){
@@ -113,6 +118,11 @@ module.exports.load = async (cfg_file) => {
           options.notification.playtime = false;
           fixFile = true;
         }
+
+        if (typeof options.notification.notifySteamLegit !== "boolean"){
+          options.notification.notifySteamLegit = true;
+          fixFile = true;
+        }
         
         //Toast
         
@@ -154,7 +164,7 @@ module.exports.load = async (cfg_file) => {
         }
         
         if (typeof options.notification_transport.gntp !== "boolean"){
-          options.notification_transport.gntp = true;
+          options.notification_transport.gntp = false;
           fixFile = true;
         }  
 
@@ -177,6 +187,11 @@ module.exports.load = async (cfg_file) => {
         
         if (typeof options.notification_advanced.iconPrefetch !== "boolean"){
           options.notification_advanced.iconPrefetch = true;
+          fixFile = true;
+        }
+
+        if (isNaN(options.notification_advanced.steamPollInterval) || options.notification_advanced.steamPollInterval < 30){
+          options.notification_advanced.steamPollInterval = 60;
           fixFile = true;
         }
         
@@ -297,7 +312,8 @@ module.exports.load = async (cfg_file) => {
             notify: true,           
             rumble: true,
             notifyOnProgress: true,
-            playtime: false
+            playtime: false,
+            notifySteamLegit: true
           },
           notification_toast: {
             customToastAudio: 1,
@@ -309,13 +325,14 @@ module.exports.load = async (cfg_file) => {
             winRT: true,
             balloon: true,
             websocket: true,
-            gntp: true
+            gntp: false
           },
           notification_advanced: {
             timeTreshold: 10,
             tick: 600,
             checkIfProcessIsRunning: true,
-            iconPrefetch: true          
+            iconPrefetch: true,
+            steamPollInterval: 60
           },
           souvenir_screenshot: {
             screenshot: true,

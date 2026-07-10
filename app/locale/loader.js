@@ -1,26 +1,21 @@
 "use strict";
 
-const remote = require('@electron/remote');
-
-const merge = require('deepmerge')
-const ffs = require("@xan105/fs");
-
-const langDir = path.join(appPath,"locale/lang");
-const steamLanguages = require(path.join(appPath,"locale/steam.json"));
-
-module.exports.load = async (lang = "english") => {
+// l10n global object for renderer
+window.l10n = {
+  load: async (lang = "english") => {
     try {
+      const appPath = window.appPath || await window.api.getAppPath();
+      const langDir = await window.api.pathJoin(appPath, "locale/lang");
+      const steamLanguages = await window.api.readJson(await window.api.pathJoin(appPath, "locale/steam.json"));
     
       if (!steamLanguages.some(language => language.api === lang)) lang = "english";   
 
-      let english = JSON.parse(await ffs.readFile(path.join(langDir,"english.json"),"utf8"));
+      let english = await window.api.readJson(await window.api.pathJoin(langDir, "english.json"));
       let template;
       try {
         if (lang != "english") {
-          let requested = JSON.parse(await ffs.readFile(path.join(langDir,`${lang}.json`),"utf8"));
-          template = merge(english,requested,{ arrayMerge: (dest, src, options) => src, //Do not concatenate array
-                                               isEmpty: a => a === null || a === '' //Ignore empty or null value
-                                             });
+          let requested = await window.api.readJson(await window.api.pathJoin(langDir, `${lang}.json`));
+          template = deepMerge(english, requested);
         } else {
           template = english;
         }
@@ -32,7 +27,7 @@ module.exports.load = async (lang = "english") => {
       let locale = steamLanguages.find(language => language.api === lang).webapi;
     
       if(template) {
-        translateUI(lang,locale,template);
+        translateUI(lang,locale,template,steamLanguages);
       } else {
         throw("Unexpected Error");
       }
@@ -40,11 +35,27 @@ module.exports.load = async (lang = "english") => {
       return locale;
       
     }catch(err){
+      console.error("l10n load error:", err);
       throw err;
     }
+  }
 }
 
-function translateUI(lang,locale,template){     
+function deepMerge(target, source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return target;
+  if (!target || typeof target !== 'object' || Array.isArray(target)) return source;
+  const output = { ...target };
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      output[key] = deepMerge(target[key], source[key]);
+    } else {
+      output[key] = source[key];
+    }
+  }
+  return output;
+}
+
+function translateUI(lang,locale,template,steamLanguages){     
         let selector = $("#option_lang");
         selector.empty();
         for (let language of steamLanguages) {
@@ -219,6 +230,22 @@ function translateUI(lang,locale,template){
         $("#settingNav li[data-view='folder'] span").text(clear(template.settings.sideMenu.folder));
         $("#settingNav li[data-view='source'] span").text(clear(template.settings.sideMenu.source));
         $("#settingNav li[data-view='advanced'] span").text(clear(template.settings.sideMenu.advanced));
+        if (template.settings.backup) {
+          $("#settingNav li[data-view='backup'] span").text(clear(template.settings.backup.sideMenu));
+          $("#backup-section-title").text(clear(template.settings.backup.title));
+          $("#backup-intro").text(clear(template.settings.backup.intro));
+          $("#backup-includes-title").text(clear(template.settings.backup.includesTitle));
+          const inc = template.settings.backup.includes || [];
+          $("#backup-includes-list").empty();
+          for (const line of inc) {
+            $("#backup-includes-list").append(`<li>${clear(line)}</li>`);
+          }
+          $("#btn-backup-export span").text(clear(template.settings.backup.exportButton));
+          $("#backup-export-help").text(clear(template.settings.backup.exportHelp));
+          $("#btn-backup-import span").text(clear(template.settings.backup.importButton));
+          $("#backup-import-help").text(clear(template.settings.backup.importHelp));
+          window.__backupL10n = template.settings.backup;
+        }
         $("#settingNav li[data-view='debug'] span").text(clear(template.settings.sideMenu.debug));
         $("#btn-settings-cancel").text(clear(template.settings.common.cancel));
         $("#btn-settings-save").text(clear(template.settings.common.save));  

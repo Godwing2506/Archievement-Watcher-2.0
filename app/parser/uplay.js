@@ -6,7 +6,7 @@ const yaml = require('js-yaml');
 const glob = require("fast-glob");
 const zip = require('adm-zip');
 const ffs = require('@xan105/fs');
-const regedit = require('regodit');
+const regedit = require('../util/reg_shim');
 const request = require('request-zero');
 const steamLanguages = require(path.join(appPath,"locale/steam.json"));
 
@@ -54,7 +54,7 @@ module.exports.scan = () => { //LumaPlay
 module.exports.scanLegit = async ( onlyInstalled = false) => { //Uplay /*Unused function; As of writing there is no way to get legit user ach unlocked data*/
   try{
     const uplayPath = regedit.RegQueryStringValue("HKLM","Software/WOW6432Node/Ubisoft/Launcher","InstallDir");
-    if (!uplayPath) throw "Uplay Path not found";
+    if (!uplayPath) return [];
     
     let data = [];
     

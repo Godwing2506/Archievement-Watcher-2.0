@@ -31,5 +31,9 @@ module.exports.scan = async () => {
 }
 
 module.exports.getAchievements = async (appID) => {
-    return JSON.parse(await ffs.readFile(path.join(cache,`${appID}.db`),"utf8"));
+    try {
+      return JSON.parse(await ffs.readFile(path.join(cache, `${appID}.db`), "utf8"));
+    } catch (err) {
+      return [];
+    }
 }

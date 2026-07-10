@@ -43,17 +43,22 @@ const template = `
       }
       ul > li { background-color: transparent;}
       ul > li:hover { background-color: rgba(255,255,255,0.20); color: #dedede}
-      ul > li#btn-close{ font-size: 16px;}
+      ul > li svg {
+          width: 11px;
+          height: 11px;
+          vertical-align: middle;
+          display: inline-block;
+      }
       ul > li#btn-close:hover { background-color: rgba(215,40,40,0.9);}
       :host(.animate) ul > li#btn-settings:hover i { transform: rotate(180deg); transition: 1.0s; }
       
     </style>
     
     <ul>
-      <li id="btn-close"><i class="fas fa-times"></i></li>
-      <li id="btn-maximize"><i class="far fa-window-maximize"></i></li>
-      <li id="btn-settings"><i class="fas fa-cog"></i></li>
-      <li id="btn-minimize"><i class="far fa-window-minimize"></i></li>
+      <li id="btn-close" title="Cerrar" aria-label="Cerrar"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></li>
+      <li id="btn-maximize" title="Maximizar" aria-label="Maximizar"><svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></li>
+      <li id="btn-settings" title="Ajustes" aria-label="Ajustes"><i class="fas fa-cog"></i></li>
+      <li id="btn-minimize" title="Minimizar" aria-label="Minimizar"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 7.5 H8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></li>
     </ul>
 `;
 

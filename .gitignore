@@ -1,6 +1,8 @@
 temp/
+.qodo/
 app/node_modules/
-server/server/v2/node_modules/
 service/updater/node_modules/
 service/watchdog/node_modules/
 service/watchdog/_wip_
+setup/_dist_/
+*.log

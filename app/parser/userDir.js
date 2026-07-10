@@ -7,17 +7,30 @@ const parentFind = require('find-up');
 const glob = require("fast-glob");
 const ffs = require("@xan105/fs");
 const listDrive = require(path.join(appPath,"util/listDrive.js"));
-const regedit = require('regodit');
+const regedit = require('../util/reg_shim');
 
 const file = path.join(remote.app.getPath('userData'),"cfg/userdir.db");
 
-const steam_emu_cfg_file_supported = ["ALI213.ini", "valve.ini", "hlm.ini", "ds.ini", "steam_api.ini", "SteamConfig.ini"];
+const steam_emu_cfg_file_supported = [
+  "ALI213.ini", 
+  "valve.ini", 
+  "hlm.ini", 
+  "ds.ini", 
+  "steam_api.ini", 
+  "SteamConfig.ini",
+  "steam_emu.ini",
+  "flt.ini",
+  "ch.ini",
+  "tenoke.ini",
+  "RUNE.ini",
+  "user_steam_id.txt"
+];
 
 module.exports.get = async () => {
     try{
         return JSON.parse(await ffs.readFile(file,"utf8"));   
     }catch(err){
-        throw err;
+        return [];
     }
 }
 
@@ -36,33 +49,83 @@ module.exports.find = async () => {
       "$Recycle.Bin", 
       "$RECYCLE.BIN", 
       "Recovery",
-      "MSOCache"
+      "MSOCache",
+      "Windows",
+      "ProgramData",
+      "node_modules",
+      ".git",
+      ".vscode",
+      ".idea"
     ];
 
-    try{
-           
-      const search = steam_emu_cfg_file_supported
-                      .filter(el => el !== "steam_api.ini") //cause a lot of false positive
-                      .concat(["rpcs3.exe"]) //add rpcs3
-                      .map((el) => { return "**/" + el }); //glob pattern
-      const drives = await listDrive();
+    const searchPatterns = steam_emu_cfg_file_supported
+      .filter(el => el !== "steam_api.ini")
+      .concat(["rpcs3.exe"])
+      .map((el) => "**/" + el);
 
-      let result = [];
+    const foundDirs = new Set();
 
-      for (let drive of drives) 
-      {
-        for (let filepath of await glob(search, {cwd: drive, ignore: ignore, onlyFiles: true, absolute: true, suppressErrors: true}))
-        {
-          result.push(path.parse(filepath).dir);
+    try {
+      // 1. Search known user/profile locations first (faster, most emulators use these)
+      const appData = process.env['APPDATA'] || path.join(process.env['USERPROFILE'] || '', 'AppData', 'Roaming');
+      const publicDocs = process.env['Public'] || path.join(process.env['SystemDrive'] || 'C:', 'Users', 'Public');
+      const userPaths = [
+        appData,
+        path.join(appData, 'Goldberg SteamEmu Saves'),
+        process.env['LOCALAPPDATA'] || path.join(process.env['USERPROFILE'] || '', 'AppData', 'Local'),
+        publicDocs,
+        path.join(process.env['USERPROFILE'] || '', 'Documents'),
+        path.join(process.env['USERPROFILE'] || '', 'Documents', 'Steam'),
+        path.join(publicDocs, 'Documents', 'Steam'),
+        path.join(publicDocs, 'Documents', 'Steam', 'RUNE'),
+        path.join(publicDocs, 'Documents', 'Steam', 'CODEX'),
+        process.env['ProgramData'] || path.join(process.env['SystemDrive'] || 'C:', 'ProgramData')
+      ].filter(Boolean);
+
+      for (const basePath of userPaths) {
+        try {
+          if (!(await ffs.exists(basePath))) continue;
+          const files = await glob(searchPatterns, { cwd: basePath, ignore, onlyFiles: true, absolute: true, suppressErrors: true });
+          files.forEach(f => foundDirs.add(path.parse(f).dir));
+          const appidDirs = await glob("[0-9]+", { cwd: basePath, onlyDirectories: true, absolute: true, suppressErrors: true });
+          appidDirs.forEach(f => foundDirs.add(path.parse(f).dir));
+        } catch (e) { /* skip */ }
+      }
+
+      // 2. Search common game install roots on each drive (avoid scanning entire disks)
+      let drives = [];
+      try {
+        drives = await listDrive();
+      } catch (e) {
+        drives = [process.env['SystemDrive'] || 'C:'];
+      }
+
+      const driveRoots = (drive) => [
+        drive,
+        path.join(drive, 'Program Files'),
+        path.join(drive, 'Program Files (x86)'),
+        path.join(drive, 'Games'),
+        path.join(drive, 'Juegos'),
+        path.join(drive, 'SteamLibrary'),
+        path.join(drive, 'Steam'),
+        path.join(drive, 'Epic Games'),
+        path.join(drive, 'XboxGames')
+      ];
+
+      for (const drive of drives) {
+        for (const root of driveRoots(drive)) {
+          try {
+            if (!(await ffs.exists(root))) continue;
+            const files = await glob(searchPatterns, { cwd: root, ignore, onlyFiles: true, absolute: true, suppressErrors: true, deep: 8 });
+            files.forEach(f => foundDirs.add(path.parse(f).dir));
+          } catch (e) { /* skip */ }
         }
-      }      
-     
-      return result;
-     
-    }catch(err){
-      throw err;
-    }  
+      }
 
+      return [...foundDirs];
+    } catch (err) {
+      throw err;
+    }
 }
 
 module.exports.check = async (dirpath) => {
@@ -78,7 +141,7 @@ module.exports.check = async (dirpath) => {
     if (scan.length > 0) return result = true;
     
     //check for accepted_files
-    scan = await glob("*.{ini,exe}",{cwd: dirpath, onlyFiles: true}); 
+    scan = await glob("*.{ini,exe,txt}",{cwd: dirpath, onlyFiles: true}); 
     for (let file of scan) if (accepted_files.some( filename => filename === file )) return result = true;
 
     return result;
@@ -102,7 +165,27 @@ module.exports.scan = async (dir) => {
       break;
       }catch(e){}
     }
-    if(!info) return result;
+    if (!info) {
+      const appidDirs = await glob("[0-9]+", { cwd: dir, onlyDirectories: true, absolute: false, suppressErrors: true });
+      const baseName = path.basename(path.normalize(dir));
+      const isRune = baseName === "RUNE";
+      const isCodex = baseName === "CODEX";
+      if ((isRune || isCodex) && appidDirs.length > 0) {
+        for (const appId of appidDirs) {
+          const appPath = path.join(dir, appId);
+          const achIni = path.join(appPath, "achievements.ini");
+          const achJson = path.join(appPath, "achievements.json");
+          if (await ffs.exists(achIni) || await ffs.exists(achJson)) {
+            result.push({
+              appid: appId,
+              source: isRune ? "RUNE" : "CODEX",
+              data: { type: "file", path: appPath }
+            });
+          }
+        }
+      }
+      return result;
+    }
 
     /*
       parentFind:
@@ -255,6 +338,37 @@ module.exports.scan = async (dir) => {
         
         }
 
+    } else if (file === "steam_emu.ini" && info.Settings && info.Settings.AppId) { // CODEX / RUNE
+
+        const appId = info.Settings.AppId;
+        const publicDocs = process.env['Public'] || path.join(process.env['SystemDrive'] || "C:", "Users/Public");
+        const pathsToCheck = [
+            path.join(publicDocs, "Documents/Steam/CODEX", appId),
+            path.join(publicDocs, "Documents/Steam/RUNE", appId),
+            path.join(process.env['APPDATA'], "Rune/Steam", appId)
+        ];
+        
+        for (const p of pathsToCheck) {
+            if (await ffs.exists(p)) {
+                result.push({
+                    appid: appId,
+                    source: "CODEX/RUNE",
+                    data: { type: "file", path: p }
+                });
+                break; 
+            }
+        }
+
+    } else if (file === "flt.ini" && info.GameSettings && info.GameSettings.AppId) { // FLT
+         const appId = info.GameSettings.AppId;
+         const p = path.join(process.env['APPDATA'], "FLT/Steam", appId);
+         if (await ffs.exists(p)) {
+             result.push({
+                 appid: appId,
+                 source: "FLT",
+                 data: { type: "file", path: p }
+             });
+         }
     }
 
   }catch(err){
