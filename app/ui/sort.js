@@ -102,33 +102,14 @@ function sort(elem, option = {}) {
         
     });
 
-    $(".achievement-list > .header .sort-ach .sort").click(function(){
-    
-        let self = $(this);
-        self.css("pointer-events","none");
-        
-        let root = self.closest(".achievement-list");
+    function sortAchievementList(root, sortby) {
         let elem = root.children("ul");
         let li = elem.children("li:not('#hidden-disclaimer')");
-
-        let sortby = {
-          percent: root.find(".header .sort-ach .sort.percentage").hasClass("active") ? true : false,
-          time: root.find(".header .sort-ach .sort.time").hasClass("active") ? true : false
-        }
-        
-        if (self.hasClass("percentage")) {
-            sortby.percent = !sortby.percent;
-        }
-        else if (self.hasClass("time")) {
-            localStorage.sortAchByTime = sortby.time = !sortby.time; 
-        }
-
         li.detach().sort(function(a, b) {
-        
               if (sortby.percent) {
                 let result = parseInt($(a).find(".achievement .stats .community .data").text()||0) - parseInt($(b).find(".achievement .stats .community .data").text()||0);
                 if (result != 0) return result;
-              }  
+              }
               if (sortby.time) {
                 let result = $(b).find(".achievement .stats .time").data("time") - $(a).find(".achievement .stats .time").data("time");
                 if (result != 0) return result;
@@ -136,13 +117,30 @@ function sort(elem, option = {}) {
                 return $(a).find(".achievement").data("index") - $(b).find(".achievement").data("index");
               }
         });
-           
         elem.prepend(li);
-        
-        (self.hasClass("active")) ? self.removeClass("active") : self.addClass("active");
-          
-        self.css("pointer-events","initial");
+    }
 
+    $(".achievement-list > .header .sort-ach .sort, .ach-toolbar-sort .sort").click(function(){
+        let self = $(this);
+        self.css("pointer-events","none");
+        const toolbar = $("#achievement .ach-toolbar-sort");
+        let sortby = {
+          percent: toolbar.find(".sort.percentage").hasClass("active") ? true : false,
+          time: toolbar.find(".sort.time").hasClass("active") ? true : false
+        };
+        if (self.hasClass("percentage")) {
+            sortby.percent = !sortby.percent;
+        } else if (self.hasClass("time")) {
+            localStorage.sortAchByTime = sortby.time = !sortby.time;
+        }
+        (self.hasClass("active")) ? self.removeClass("active") : self.addClass("active");
+        if (self.closest(".ach-toolbar-sort").length) {
+          sortAchievementList($("#unlock"), sortby);
+          sortAchievementList($("#lock"), sortby);
+        } else {
+          sortAchievementList(self.closest(".achievement-list"), sortby);
+        }
+        self.css("pointer-events","initial");
     });
 
   });

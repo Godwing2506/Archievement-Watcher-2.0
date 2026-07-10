@@ -62,9 +62,12 @@ function translateUI(lang,locale,template){
         selector.find("li:nth-child(1) span:eq(1)").text(clear(template.achievements));
         selector.find("li:nth-child(2) span:eq(1)").text(clear(template.perfectGame));
         selector.find("li:nth-child(3) span:eq(1)").text(clear(template.completionRate));
-        $("#btn-previous").text(clear(template.allGamesBackButton));
+        $("#btn-previous").attr("title", clear(template.allGamesBackButton));
+        $("#ach-nav-title").text(clear(template.achievements) || "Achievements");
         $("#unlock .header .title span").text(clear(template.unlocked));
         $("#lock .header .title span").text(clear(template.locked));
+        $("#achievement").data("lang-statusLocked", clear(template.locked));
+        $("#achievement").data("lang-statusUnlocked", clear(template.unlocked));
         $("#achievement .achievements").data("lang-globalStat",clear(template.globalStat));
         $("#unlock").data("lang-noneUnlocked",clear(template.noneUnlocked));
         $("#unlock").data("lang-play",clear(template.play));

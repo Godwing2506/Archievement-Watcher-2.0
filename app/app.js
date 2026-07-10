@@ -36,7 +36,7 @@ var app = {
     let names = namesMaybe;
     if (Array.isArray(gameOrNames) || typeof gameOrNames === "string") {
       names = Array.isArray(gameOrNames) ? gameOrNames : [gameOrNames];
-      game = $("#achievement .wrapper > .header").data("currentGame");
+      game = $("#achievement .header").data("currentGame");
     }
     if (!this.isMasterModeEnabled()) {
       throw new Error("Modo Master no está activado. Ve a Ajustes → Depurar.");
@@ -152,7 +152,7 @@ var app = {
        $("#user-info .info .stats li:eq(2) span.data").text(avg);
        $("#user-info .info .stats li:eq(1) span.data").text(app.gameList.filter(g => g.achievement.unlocked == g.achievement.total).length);
        $("#user-info .info .stats li:eq(0) span.data").text(app.gameList.filter(g => g.achievement.unlocked > 0).reduce((acc, curr) => acc + parseInt(curr.achievement.unlocked), 0));
-       const currentGame = $("#achievement .wrapper > .header").data("currentGame");
+       const currentGame = $("#achievement .header").data("currentGame");
        if (currentGame && String(currentGame.appid) === String(appID) && $("#achievement").is(":visible")) {
          app.renderAchievementList(game, percent, achName);
        }
@@ -450,7 +450,7 @@ var app = {
                  $("#user-info .info .stats li:eq(2) span.data").text(avg);
                  $("#user-info .info .stats li:eq(1) span.data").text(list.filter(g => g.achievement.unlocked == g.achievement.total).length);
                  $("#user-info .info .stats li:eq(0) span.data").text(list.filter(g => g.achievement.unlocked > 0).reduce((acc,curr)=>acc+parseInt(curr.achievement.unlocked),0));
-                 if ($("#achievement").is(":visible") && $("#achievement .wrapper > .header").data("currentGame") === game) app.renderAchievementList(game);
+                 if ($("#achievement").is(":visible") && $("#achievement .header").data("currentGame") === game) app.renderAchievementList(game);
                }
              }
            } }));
@@ -578,15 +578,39 @@ var app = {
    }, 300);
 
   },
+  updateAchievementSidebar: function(game, percent) {
+    const pct = percent !== undefined && percent !== null ? percent : (game.achievement.total > 0 ? Math.round(100 * game.achievement.unlocked / game.achievement.total) : 0);
+    const coverUrl = (game.img && (game.img.portrait || game.img.header)) ? (game.img.portrait || game.img.header) : "";
+    if (coverUrl) {
+      $("#ach-cover").css("background-image", `url('${coverUrl}')`);
+    } else {
+      $("#ach-cover").css("background-image", "none");
+    }
+    $("#ach-sidebar-progress").attr("data-percent", pct).find(".meter").css("width", pct + "%");
+    $("#ach-stat-pct .ach-stat-val").text(pct + "%");
+    $("#ach-stat-total .ach-stat-val").text(`${game.achievement.unlocked} / ${game.achievement.total}`);
+    const hiddenList = game.achievement.list.filter(a => a.hidden == 1);
+    const visibleList = game.achievement.list.filter(a => a.hidden != 1);
+    const hiddenUnlocked = hiddenList.filter(a => a.Achieved).length;
+    const visibleUnlocked = visibleList.filter(a => a.Achieved).length;
+    $("#ach-stat-hidden .ach-stat-val").text(`${hiddenUnlocked} / ${hiddenList.length}`);
+    $("#ach-stat-visible .ach-stat-val").text(`${visibleUnlocked} / ${visibleList.length}`);
+    if (game.system === "playstation") {
+      $(".ach-sidebar-meta .trophy li.platinum span").text(game.achievement.list.filter(ach => ach.Achieved && ach.type === "P").length);
+      $(".ach-sidebar-meta .trophy li.gold span").text(game.achievement.list.filter(ach => ach.Achieved && ach.type === "G").length);
+      $(".ach-sidebar-meta .trophy li.silver span").text(game.achievement.list.filter(ach => ach.Achieved && ach.type === "S").length);
+      $(".ach-sidebar-meta .trophy li.bronze span").text(game.achievement.list.filter(ach => ach.Achieved && ach.type === "B").length);
+      $(".ach-sidebar-meta .trophy").show();
+    } else {
+      $(".ach-sidebar-meta .trophy").hide();
+    }
+  },
   renderAchievementList: function(game, percentFromBox, highlightAchievementName){
     const percent = (percentFromBox !== undefined && percentFromBox !== null) ? percentFromBox : (game.achievement.total > 0 ? Math.round(100 * game.achievement.unlocked / game.achievement.total) : 0);
-    $("#achievement .wrapper > .header .stats .counter").attr("data-count", game.achievement.unlocked).attr("data-max", game.achievement.total).attr("data-percent", percent);
-    if (game.system === "playstation") {
-      $('#achievement .wrapper > .header[data-system="playstation"] .trophy li.platinum span').text(game.achievement.list.filter(ach => ach.Achieved && ach.type === "P").length);
-      $('#achievement .wrapper > .header[data-system="playstation"] .trophy li.gold span').text(game.achievement.list.filter(ach => ach.Achieved && ach.type === "G").length);
-      $('#achievement .wrapper > .header[data-system="playstation"] .trophy li.silver span').text(game.achievement.list.filter(ach => ach.Achieved && ach.type === "S").length);
-      $('#achievement .wrapper > .header[data-system="playstation"] .trophy li.bronze span').text(game.achievement.list.filter(ach => ach.Achieved && ach.type === "B").length);
-    }
+    $("#achievement .header .stats .counter").attr("data-count", game.achievement.unlocked).attr("data-max", game.achievement.total).attr("data-percent", percent);
+    app.updateAchievementSidebar(game, percent);
+    const statusLocked = $("#achievement").data("lang-statusLocked") || "Locked";
+    const statusUnlocked = $("#achievement").data("lang-statusUnlocked") || "Unlocked";
     let unlock = $("#unlock ul");
     let lock = $("#lock ul");
     unlock.empty();
@@ -595,21 +619,29 @@ var app = {
     let i = 0;
     for (let achievement of game.achievement.list) {
       const pct = (achievement.MaxProgress > 0) ? Math.floor((achievement.CurProgress / achievement.MaxProgress) * 100) : '0';
+      const statusBadge = achievement.Achieved
+        ? `<span class="ach-badge unlocked">${statusUnlocked}</span>`
+        : `<span class="ach-badge locked">${statusLocked}</span>`;
+      const hiddenIcon = (achievement.hidden == 1) ? `<span class="ach-hidden-icon" title="Logro oculto"><i class="fas fa-eye-slash"></i></span>` : '';
       let template = `
         <li>
           <div class="achievement" data-name="${achievement.name}" data-index="${i}">
+            ${hiddenIcon}
             <div class="box">
               <div class="glow mask contain"><div class="glow mask ray "><div class="glow fx"></div></div></div>
               <div class="icon" style="background: url('${achievement.Achieved ? achievement.icon : achievement.icongray}');"></div>
             </div>
             <div class="content">
-              <div class="title">${game.system === "playstation" ? `<i class="fas fa-trophy" data-type="${achievement.type}"></i> ${achievement.displayName}` : achievement.displayName}</div>
+              <div class="ach-card-head">
+                <div class="title">${game.system === "playstation" ? `<i class="fas fa-trophy" data-type="${achievement.type}"></i> ${achievement.displayName}` : achievement.displayName}</div>
+                ${statusBadge}
+              </div>
               <div class="description">${achievement.description || ''}</div>
               <div class="progressBar" data-current="${achievement.CurProgress || '0'}" data-max="${achievement.MaxProgress || '0'}" data-percent="${pct}"><span class="meter" style="width:${pct}%"></span></div>
-            </div>
-            <div class="stats">
-              <div class="time" data-time="${achievement.UnlockTime}"><i class="fas fa-clock"></i> <span>${moment.unix(achievement.UnlockTime).format('L LT')}</span><span>${moment.unix(achievement.UnlockTime).fromNow()}</span></div>
-              <div class="community"><i class="fab fa-steam"></i> <span class="data">--</span>% ${$("#achievement .achievements").data("lang-globalStat")}</div>
+              <div class="stats">
+                <div class="time" data-time="${achievement.UnlockTime}"><i class="fas fa-clock"></i> <span>${moment.unix(achievement.UnlockTime).format('L LT')}</span><span>${moment.unix(achievement.UnlockTime).fromNow()}</span></div>
+                <div class="community"><i class="fab fa-steam"></i> <span class="data">--</span>% ${$("#achievement .achievements").data("lang-globalStat")}</div>
+              </div>
             </div>
           </div>
         </li>`;
@@ -633,8 +665,8 @@ var app = {
         }
       }
     }
-    if ($("#unlock > .header .sort-ach .sort.time").hasClass("show") && localStorage.sortAchByTime === "true") {
-      $("#unlock > .header .sort-ach .sort.time").trigger("click");
+    if ($("#achievement .ach-toolbar-sort .sort.time").hasClass("show") && localStorage.sortAchByTime === "true") {
+      $("#achievement .ach-toolbar-sort .sort.time").trigger("click");
     }
     const count_unlocked = game.achievement.list.filter(elem => elem.Achieved).length;
     const count_locked = game.achievement.list.length - count_unlocked;
@@ -672,7 +704,7 @@ var app = {
     }
   },
   refreshCurrentGame: async function(newlyUnlockedName){
-    const game = $("#achievement .wrapper > .header").data("currentGame");
+    const game = $("#achievement .header").data("currentGame");
     if (!game || !game.appid || game.system === "playstation" || game.system === "uplay") return;
     if (!game.data || (game.data.type !== "file" && game.data.type !== "cached" && game.data.type !== "steamAPI" && game.data.type !== "lumaplay")) return;
     const btn = $("#btn-refresh-ach");
@@ -698,7 +730,7 @@ var app = {
 
         let game = list.find( elem => elem.appid == self.data("appid") && list.indexOf(elem) == self.data("index"));
 
-        if (self.data('time') > 0) $("#unlock > .header .sort-ach .sort.time").addClass("show");
+        if (self.data('time') > 0) $("#achievement .ach-toolbar-sort .sort.time").addClass("show");
         
         $("#search-bar-float input[type=search]").val("").blur().removeClass("has"); //reset
         
@@ -718,22 +750,22 @@ var app = {
             }
             
             if (game.system) {
-              $("#achievement .wrapper > .header").attr("data-system",game.system);
+              $("#achievement .header").attr("data-system",game.system);
             } else {
-              $("#achievement .wrapper > .header").removeAttr("data-system");
+              $("#achievement .header").removeAttr("data-system");
             }
             
             if(game.img.icon) {
-              $("#achievement .wrapper > .header .title .icon").css("background",`url('${game.img.icon}')`);
+              $("#achievement .header .title .icon").css("background",`url('${game.img.icon}')`);
             }
 
-            $("#achievement .wrapper > .header .title span").text(game.name);
+            $("#achievement .header .title span").text(game.name);
             
             // Platinum Label in Header
-            const platLabel = $("#achievement .wrapper > .header .platinum-label");
+            const platLabel = $("#achievement .header .platinum-label");
             if (game.achievement.total > 0 && game.achievement.unlocked === game.achievement.total) {
               if (platLabel.length === 0) {
-                $("#achievement .wrapper > .header .title").after('<div class="platinum-label"><i class="fas fa-certificate"></i> 100% PLATINADO</div>');
+                $("#achievement .header .title").after('<div class="platinum-label"><i class="fas fa-certificate"></i> 100% PLATINADO</div>');
               } else {
                 platLabel.show();
               }
@@ -741,9 +773,9 @@ var app = {
               platLabel.hide();
             }
 
-            $('#achievement .wrapper > .header .playtime').hide();
-            $('#achievement .wrapper > .header .lastplayed').hide();
-            const notifyStatus = $('#achievement .wrapper > .header .notify-status');
+            $('.ach-sidebar-meta .playtime').hide();
+            $('.ach-sidebar-meta .lastplayed').hide();
+            const notifyStatus = $('.ach-sidebar-meta .notify-status');
             notifyStatus.show();
             if (game.notifyToast === "steam") {
               notifyStatus.removeClass("no").addClass("yes").find("span").text("Toast: Sí (Steam)");
@@ -756,7 +788,7 @@ var app = {
               notifyStatus.attr("title", "Este juego no está en la lista de notificaciones. Steam oficial: recarga la lista. Emulador: añade la carpeta en Ajustes con «Notificar».");
             }
             if (game.system === "playstation" || game.system === "uplay") notifyStatus.hide();
-            $("#achievement .wrapper > .header").data("currentGame", game);
+            $("#achievement .header").data("currentGame", game);
             if (game.system === "playstation" || game.system === "uplay") { $("#btn-reset-track").hide(); $("#btn-refresh-ach").hide(); $("#btn-master-unlock").hide(); } else { $("#btn-reset-track").show(); $("#btn-refresh-ach").show(); if (typeof window.syncMasterButtons === "function") window.syncMasterButtons(); }
             if (game.system !== "playstation" && game.system !== "uplay"){
               PlaytimeTracking(game.appid).then(({playtime, lastplayed})=>{
@@ -769,18 +801,18 @@ var app = {
                   } else {
                     humanized = humanizeDuration(playtime * 1000, { language: moment.locale(), fallbacks: ["en"], units: ["h", "m"], round: true });
                   }
-                  $('#achievement .wrapper > .header .playtime span').text(`${humanized}`);
-                  $('#achievement .wrapper > .header .playtime').css("display","inline-block");
+                  $('.ach-sidebar-meta .playtime span').text(`${humanized}`);
+                  $('.ach-sidebar-meta .playtime').css("display","flex");
                 }
                 
                 if(lastplayed > 0){
-                  $('#achievement .wrapper > .header .lastplayed span').text(`${moment.unix(lastplayed).format('ll')}`);
-                  $('#achievement .wrapper > .header .lastplayed').css("display","inline-block");
+                  $('.ach-sidebar-meta .lastplayed span').text(`${moment.unix(lastplayed).format('ll')}`);
+                  $('.ach-sidebar-meta .lastplayed').css("display","flex");
                 }
               }).catch((err)=>{debug.error(err)});
             }
             
-            $("#unlock > .header .sort-ach .sort.time").removeClass("active");
+            $("#achievement .ach-toolbar-sort .sort.time").removeClass("active");
             app.renderAchievementList(game, self.find(".progressBar").data("percent"));
 
             let elem = $("#achievement .achievement-list ul > li");

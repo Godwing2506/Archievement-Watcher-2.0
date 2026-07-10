@@ -23,7 +23,7 @@ function getSteamGlobalStat(appid) {
            if(percent >= 0 && percent <= 10) { elem.addClass("rare") }
  
         }
-        $(".achievement-list > .header .sort-ach .sort.percentage").addClass("show");
+        $(".ach-toolbar-sort .sort.percentage, .achievement-list > .header .sort-ach .sort.percentage").addClass("show");
       },
       error: ()=>{},
       complete: ()=>{}
@@ -51,7 +51,7 @@ function getSteamGlobalStat(appid) {
         $("#achievement").fadeOut(500,function() {
             setTimeout(()=>{  
               $("body").removeAttr("style");
-              $(".achievement-list > .header .sort-ach .sort").removeClass("show active");
+              $(".achievement-list > .header .sort-ach .sort, .ach-toolbar-sort .sort").removeClass("show active");
               $("#home").fadeIn(500,function() {
                   self.css("pointer-events","initial");
               });
@@ -65,7 +65,7 @@ function getSteamGlobalStat(appid) {
 
     function syncMasterButtons() {
       const enabled = typeof app.isMasterModeEnabled === "function" && app.isMasterModeEnabled();
-      const game = $("#achievement .wrapper > .header").data("currentGame");
+      const game = $("#achievement .header").data("currentGame");
       const canUse = enabled && game && game.data && game.data.type === "file"
         && game.system !== "playstation" && game.system !== "uplay";
       $("#btn-master-unlock").toggle(!!canUse);
@@ -76,7 +76,7 @@ function getSteamGlobalStat(appid) {
 
     $("#btn-master-unlock").click(async function() {
       if (!app.isMasterModeEnabled || !app.isMasterModeEnabled()) return;
-      const game = $("#achievement .wrapper > .header").data("currentGame");
+      const game = $("#achievement .header").data("currentGame");
       if (!game) return;
       const masterUnlock = require(path.join(appRoot, "parser", "masterUnlock.js"));
       const locked = masterUnlock.getLockedNames(game);
@@ -102,7 +102,7 @@ function getSteamGlobalStat(appid) {
 
     $(document).on("click", "#lock .achievement.master-clickable", async function() {
       if (!app.isMasterModeEnabled || !app.isMasterModeEnabled()) return;
-      const game = $("#achievement .wrapper > .header").data("currentGame");
+      const game = $("#achievement .header").data("currentGame");
       if (!game) return;
       const name = $(this).data("name");
       const displayName = $(this).find(".title").first().text().trim() || name;
@@ -123,7 +123,7 @@ function getSteamGlobalStat(appid) {
     window.syncMasterButtons = syncMasterButtons;
     
     $("#btn-reset-track").click(async function(){
-      const game = $("#achievement .wrapper > .header").data("currentGame");
+      const game = $("#achievement .header").data("currentGame");
       if (!game || !game.appid) return;
       const path = require("path");
       const fs = require("fs");

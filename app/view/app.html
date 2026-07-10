@@ -74,68 +74,93 @@
            </div>
         </div>
 
-        <div class="wrapper">
-        
-            <div class="header">
-              <div class="title"><div class="icon"></div><span></span></div>
-              <div class="stats">
-                <div class="counter" data-count="0" data-max="0" data-percent="0"><i class="fas fa-trophy"></i></div>
+        <div class="wrapper ach-layout">
+
+            <aside class="ach-sidebar">
+              <div class="ach-cover" id="ach-cover"></div>
+              <div class="ach-sidebar-progress progressBar" id="ach-sidebar-progress" data-percent="0">
+                <span class="meter"></span>
               </div>
-              <div class="trophy">
-                <ol>
-                  <li class="platinum"><i class="fas fa-trophy"></i> <span>0</span></li>
-                  <li class="gold"><i class="fas fa-trophy"></i> <span>0</span></li>
-                  <li class="silver"><i class="fas fa-trophy"></i> <span>0</span></li>
-                  <li class="bronze"><i class="fas fa-trophy"></i> <span>0</span></li>
-                </ol>  
-              </div>
-              <div class="playtime">
-                <i class="fas fa-stopwatch"></i> <span></span>
-              </div>
-              <div class="lastplayed">
-                <i class="fas fa-calendar-alt"></i> <span></span>
-              </div>
-              <div class="notify-status" title="">
-                <i class="fas fa-bell"></i> <span></span>
-              </div>
-              <div class="master-unlock" id="btn-master-unlock" title="Desbloquear logros restantes (modo Master)"><i class="fas fa-crown"></i> <span>Modo Master</span></div>
-              <div class="reset-track" id="btn-reset-track" title="Borrar registro de logros (para pruebas). Al desbloquear de nuevo se notificará."><i class="fas fa-undo-alt"></i> <span>Reset registro</span></div>
-              <div class="refresh-ach" id="btn-refresh-ach" title="Actualizar logros"><i class="fas fa-sync-alt"></i> <span>Actualizar</span></div>
-              <div class="backButton" id="btn-previous"></div>
-            </div>
-            
-            <div class="achievements">
-            
-               <div id="unlock" class="achievement-list active">
-                <div class="header">
-                  <span class="title" data-count="0"><i class="fas fa-unlock"></i> <span></span></span>
-                  <span class="sort-ach">
-                    <div class="percentage sort"><i class="fas fa-sort-numeric-down"></i><i class="fas fa-percent"></i></div>     
-                    <div class="time sort"><i class="fas fa-sort-numeric-down"></i><i class="far fa-clock"></i></div>
-                  </span>
-                  <span class="toggle"><i class="fas fa-chevron-right"></i></span>
+              <div class="ach-stats-grid">
+                <div class="ach-stat" id="ach-stat-pct">
+                  <div class="ach-stat-icon"><i class="fas fa-trophy"></i></div>
+                  <div class="ach-stat-val">0%</div>
+                  <div class="ach-stat-lbl">COMPLETADO</div>
                 </div>
-                <ul> 
-                </ul>
-              </div>
-              
-              <div id="lock" class="achievement-list active">
-                <div class="header">
-                  <span class="title" data-count="0"><i class="fas fa-lock"></i> <span></span></span>
-                  <span class="sort-ach">
-                    <div class="percentage sort"><i class="fas fa-sort-numeric-down"></i><i class="fas fa-percent"></i></div>
-                  </span>
-                  <span class="toggle"><i class="fas fa-chevron-right"></i></span>
+                <div class="ach-stat" id="ach-stat-total">
+                  <div class="ach-stat-val">0 / 0</div>
+                  <div class="ach-stat-lbl">TOTAL</div>
                 </div>
-                <ul>
-                </ul>
+                <div class="ach-stat" id="ach-stat-hidden">
+                  <div class="ach-stat-val">0 / 0</div>
+                  <div class="ach-stat-lbl">OCULTOS</div>
+                </div>
+                <div class="ach-stat" id="ach-stat-visible">
+                  <div class="ach-stat-val">0 / 0</div>
+                  <div class="ach-stat-lbl">VISIBLES</div>
+                </div>
+              </div>
+              <div class="ach-sidebar-meta">
+                <div class="trophy">
+                  <ol>
+                    <li class="platinum"><i class="fas fa-trophy"></i> <span>0</span></li>
+                    <li class="gold"><i class="fas fa-trophy"></i> <span>0</span></li>
+                    <li class="silver"><i class="fas fa-trophy"></i> <span>0</span></li>
+                    <li class="bronze"><i class="fas fa-trophy"></i> <span>0</span></li>
+                  </ol>
+                </div>
+                <div class="playtime"><i class="fas fa-stopwatch"></i> <span></span></div>
+                <div class="lastplayed"><i class="fas fa-calendar-alt"></i> <span></span></div>
+                <div class="notify-status" title=""><i class="fas fa-bell"></i> <span></span></div>
+              </div>
+            </aside>
+
+            <div class="ach-main">
+              <div class="ach-topbar">
+                <div class="backButton" id="btn-previous"><i class="fas fa-arrow-left"></i></div>
+                <span class="ach-nav-title" id="ach-nav-title">Logros</span>
+                <div class="ach-topbar-tools">
+                  <span class="sort-ach ach-toolbar-sort">
+                    <div class="percentage sort" title="Ordenar por rareza"><i class="fas fa-sort-numeric-down"></i><i class="fas fa-percent"></i></div>
+                    <div class="time sort" title="Ordenar por fecha"><i class="fas fa-sort-numeric-down"></i><i class="far fa-clock"></i></div>
+                  </span>
+                  <div class="refresh-ach" id="btn-refresh-ach" title="Actualizar logros"><i class="fas fa-sync-alt"></i></div>
+                  <div class="master-unlock" id="btn-master-unlock" title="Desbloquear logros restantes (modo Master)"><i class="fas fa-crown"></i></div>
+                  <div class="reset-track" id="btn-reset-track" title="Borrar registro de logros (para pruebas). Al desbloquear de nuevo se notificará."><i class="fas fa-undo-alt"></i></div>
+                </div>
               </div>
 
-            <div id="btn-scrollup"> 
-              <div></div>
-              <span></span>
-            </div>
-              
+              <div class="header">
+                <div class="title"><div class="icon"></div><span></span></div>
+                <div class="stats">
+                  <div class="counter" data-count="0" data-max="0" data-percent="0"><i class="fas fa-trophy"></i></div>
+                </div>
+              </div>
+
+              <div class="achievements">
+
+                <div id="unlock" class="achievement-list active">
+                  <div class="header">
+                    <span class="title" data-count="0"><i class="fas fa-unlock"></i> <span></span></span>
+                    <span class="toggle"><i class="fas fa-chevron-right"></i></span>
+                  </div>
+                  <ul></ul>
+                </div>
+
+                <div id="lock" class="achievement-list active">
+                  <div class="header">
+                    <span class="title" data-count="0"><i class="fas fa-lock"></i> <span></span></span>
+                    <span class="toggle"><i class="fas fa-chevron-right"></i></span>
+                  </div>
+                  <ul></ul>
+                </div>
+
+                <div id="btn-scrollup">
+                  <div></div>
+                  <span></span>
+                </div>
+
+              </div>
             </div>
         </div>
 
