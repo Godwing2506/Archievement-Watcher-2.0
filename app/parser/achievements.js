@@ -9,6 +9,9 @@ const greenluma = require(path.join(appPath,"parser/greenluma.js"));
 const userDir = require(path.join(appPath,"parser/userDir.js"));
 const blacklist = require(path.join(appPath,"parser/blacklist.js"));
 const watchdog = require(path.join(appPath,"parser/watchdog.js"));
+const emulators = require(path.join(appPath,"parser/emulators.js"));
+const emuFormats = require(path.join(appPath,"parser/emuFormats.js"));
+const emuToRoot = (file) => { const o = {}; for (const a of emuFormats.parseFile(file)) o[a.name] = a; return o; };
 const debug = new (require("@xan105/log"))({
   console: remote.getCurrentWindow().isDev || false,
   file: path.join(remote.app.getPath('userData'),"logs/parser.log")
@@ -97,6 +100,14 @@ async function discover(source, callbackProgress = () => {}) {
       scanPromises.push(watchdog.scan().then(r => { debug.log(`[DIAG] watchdog.scan took ${Date.now()-t0}ms, found ${r.length}`); onScanDone(); return r; }).catch(err => { debug.error(`[DIAG] watchdog.scan ERROR after ${Date.now()-t0}ms: ${err}`); onScanDone(); return []; }));
     }
     
+    if(source.steamEmu){
+      scanPromises.push(emulators.scan().then(r => {
+        // avoid duplicates already found by steam.scan()
+        const known = new Set(data.concat().map(d => d.data && d.data.path));
+        return r.filter(e => !known.has(e.data.path));
+      }).catch(err => { debug.error(err); return []; }));
+    }
+
     let scanResults = await Promise.all(scanPromises);
     
     for (let result of scanResults) {
@@ -198,6 +209,9 @@ async function loadSchema(appid, option, schemaPromises) {
 
 async function readLocalRoot(appid, game, option) {
   const t = appid.data.type;
+  if (t === "file" && appid.data.file && ["gbe_fork","goldberg","onlinefix"].includes(appid.data.emulator)) {
+    return emuToRoot(appid.data.file);
+  }
   if (t === "file") {
     const root = await steam.getAchievementsFromFile(appid.data.path);
     if (root && root.constructor === Object && Object.entries(root).length === 0) debug.warn(`[${appid.appid}] Warning ! Achievement file in '${appid.data.path}' is probably empty`);
@@ -403,7 +417,13 @@ module.exports.refreshAchievements = async (game, option) => {
   let root;
   try {
     let gotRoot = false;
-    if (game.data.type === "file" && game.data.path) {
+    if (game.data.type === "file" && game.data.file && ["gbe_fork","goldberg","onlinefix"].includes(game.data.emulator)) {
+      try { root = emuToRoot(game.data.file); gotRoot = Object.keys(root).length > 0; } catch (e) { debug.warn(e); }
+    }
+    if (!gotRoot && game.data.type === "rpcs3" && game.data.path) {
+      try { root = await rpcs3.getAchievements(game.data.path, game.achievement.total); gotRoot = !!root; } catch (e) { debug.warn(e); }
+    }
+    if (!gotRoot && game.data.type === "file" && game.data.path) {
       // First try the normal path
       try {
         root = await steam.getAchievementsFromFile(game.data.path);

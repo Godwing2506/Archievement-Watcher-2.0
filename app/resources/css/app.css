@@ -1496,7 +1496,7 @@ main {
 }
 
 #settings .content li .left {
-	text-overflow: ellipsis;
+        text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
     max-width: 275px;
@@ -1806,34 +1806,34 @@ main {
 
 #search-bar input[type=search]:focus, 
 #search-bar input[type=search].has {
-	width: 200px;
-	box-shadow: rgba(103, 193, 245, 0.4) 0px 0px 12px 2px;
-	border-color: #67c1f5;
-	padding-left: 32px;
-	color: #d9dfe4;
-	cursor: text;
+        width: 200px;
+        box-shadow: rgba(103, 193, 245, 0.4) 0px 0px 12px 2px;
+        border-color: #67c1f5;
+        padding-left: 32px;
+        color: #d9dfe4;
+        cursor: text;
 }
 
 #search-bar-float input[type=search]:focus, 
 #search-bar-float input[type=search].has {
-	width: 260px;
-	box-shadow: 0 4px 12px rgba(0,0,0,0.4), rgba(103, 193, 245, 0.3) 0px 0px 12px;
-	border-color: #67c1f5;
-	padding-left: 36px;
-	color: #d9dfe4;
-	cursor: text;
+        width: 260px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4), rgba(103, 193, 245, 0.3) 0px 0px 12px;
+        border-color: #67c1f5;
+        padding-left: 36px;
+        color: #d9dfe4;
+        cursor: text;
 }
 
 #search-bar input::-webkit-search-decoration,
 #search-bar input::-webkit-search-cancel-button,
 #search-bar-float input::-webkit-search-decoration,
 #search-bar-float input::-webkit-search-cancel-button {
-	display: none; 
+        display: none; 
 }
 
 #search-bar input::-webkit-input-placeholder,
 #search-bar-float input::-webkit-input-placeholder {
-	color: transparent;
+        color: transparent;
 }
 
 #game-list.view-portrait ul { grid-template-columns: repeat( auto-fit, minmax(180px, 1fr) ); }
@@ -2298,3 +2298,73 @@ main {
 #achievement #btn-scrollup {
   margin-top: 16px;
 }
+
+/* ==========================================================================
+   Rediseño 2026: variables de tema, tarjetas, progreso y transiciones
+   ========================================================================== */
+:root {
+  --primary-color: #66c0f4;
+  --primary-strong: #1a9fff;
+  --bg-color: #1b2838;
+  --surface-color: #223246;
+  --surface-hover: #2d455f;
+  --text-color: #dfe6ef;
+  --text-muted: #aebad0;
+  --success-color: #5ba32b;
+  --radius: 8px;
+  --shadow: 0 4px 14px rgba(0, 0, 0, .35);
+  --transition: .2s ease;
+  --font-ui: "Segoe UI", "Inter", Roboto, Arial, sans-serif;
+}
+[data-theme="light"] {
+  --primary-color: #1a73c9;
+  --primary-strong: #0b5cad;
+  --bg-color: #eef2f7;
+  --surface-color: #ffffff;
+  --surface-hover: #e3ebf5;
+  --text-color: #1d2733;
+  --text-muted: #5b6878;
+  --shadow: 0 3px 10px rgba(20, 40, 70, .12);
+}
+
+body { font-family: var(--font-ui); color: var(--text-color); }
+
+.achievement {
+  background: var(--surface-color);
+  border-radius: var(--radius);
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+}
+.achievement:hover {
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+.achievement .icon { border-radius: 6px; transition: opacity .35s ease, filter var(--transition); }
+.icon.lazy-bg:not(.loaded) { opacity: 0; }
+.icon.lazy-bg.loaded { opacity: 1; }
+
+.progressBar .meter {
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progressBar .meter > span {
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--primary-strong), var(--primary-color));
+  transition: width .5s ease;
+}
+
+.game-box { transition: transform var(--transition), box-shadow var(--transition); border-radius: var(--radius); }
+.game-box:hover { transform: translateY(-3px) scale(1.01); box-shadow: var(--shadow); }
+
+.emu-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: .75em;
+  border-radius: 10px;
+  color: var(--bg-color);
+  background: var(--primary-color);
+  vertical-align: middle;
+}
+
+button, .btn, a { transition: color var(--transition), background var(--transition), opacity var(--transition); }

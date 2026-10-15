@@ -21,6 +21,7 @@ const files = {
     "remote/achievements.ini",
     "remote/achievements.json",
     "Stats/achievements.ini",
+    "Stats/Achievements.ini",
     "tenoke.ini",
     "rune.ini",
     "data.ini",
@@ -76,6 +77,18 @@ module.exports.getFolders = async (userDir_file) => {
     },
     { 
       dir: path.join(process.env['APPDATA'],"Goldberg SteamEmu Saves"), 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
+    },
+    { 
+      dir: path.join(process.env['APPDATA'],"GSE Saves"), 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
+    },
+    { 
+      dir: path.join(process.env['Public'],"Documents/OnlineFix"), 
+      options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
+    },
+    { 
+      dir: path.join(process.env['APPDATA'],"OnlineFix"), 
       options: { recursive: true, filter: /([0-9]+)/, file: achievementFiles, disableCheckTimestamp: true }
     },
     { 

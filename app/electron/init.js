@@ -235,12 +235,14 @@ try {
       const appData = app.getPath('appData');
       const publicDir = process.env.PUBLIC || path.join(process.env.SystemRoot || "C:\\Windows", "..", "Users", "Public");
       
-      const paths = [
+      let paths = [
         path.join(appData, "Goldberg SteamEmu Saves"),
         path.join(publicDir, "Documents", "Steam", "RUNE"),
         path.join(publicDir, "Documents", "Steam", "CODEX"),
         path.join(publicDir, "Documents", "Steam", "Tenoke")
       ];
+      try { paths = paths.concat(require(path.join(__dirname, "..", "parser", "emulators.js")).allRoots()); } catch (e) { /* ignore */ }
+      paths = [...new Set(paths)];
       return paths.filter(p => fs.existsSync(p));
     });
 
