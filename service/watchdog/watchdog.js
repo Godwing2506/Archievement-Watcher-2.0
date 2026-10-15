@@ -151,17 +151,21 @@ var app = {
         
         const currentTime = Date.now();
 		const fileLastModified = (await fs.stats(name)).mtimeMs || 0;
-		if ( (currentTime - fileLastModified) > 15000) return; // Increased to 15s for slower writes
+		// Only discard really stale events (e.g. touched by an antivirus/backup); emus that buffer writes stay within this window
+		if ( (currentTime - fileLastModified) > 120000) return;
         
         let filePath = path.parse(name);
-        if (!options.file.some(file => file == filePath.base)) {
-           // Check for case-insensitive match just in case
-           if (!options.file.some(file => file.toLowerCase() == filePath.base.toLowerCase())) return;
-        }
+        const normalizedName = name.replace(/\\/g, "/").toLowerCase();
+        const fileMatches = options.file.some((file) => {
+           const f = file.replace(/\\/g, "/").toLowerCase();
+           return f === filePath.base.toLowerCase() || normalizedName.endsWith("/" + f);
+        });
+        if (!fileMatches) return;
         
         debug.log(`Achievement file change detected: ${name}`);
 
-        if (moment().diff(moment(self.tick)) <= self.options.notification_advanced.tick) throw "Spamming protection is enabled > SKIPPING";
+        // Spam protection only throttles notifications: the UI refresh signal is always sent (see below)
+        const isSpam = moment().diff(moment(self.tick)) <= self.options.notification_advanced.tick;
         self.tick = moment().valueOf();
         
         let appID;
@@ -213,6 +217,11 @@ var app = {
           debug.log(`Watchdog detection error for ${name}: ${err}`);
           return; // Skip instead of throwing to keep watcher alive
         }
+
+        // UI refresh signal: decoupled from notifications, process detection and timestamp filters
+        websocket.broadcast({ type: "achievements-changed", appID: String(appID), path: name, time: Date.now() });
+
+        if (isSpam) { debug.log("Spamming protection is enabled > skipping notification (UI refresh already sent)"); return; }
 
         debug.log(`Processing achievements for AppID: ${appID} from file: ${filePath.base}`);
         let game = await self.load(appID);
@@ -506,6 +515,7 @@ var app = {
             });
             j += 1;
           }
+          if (j > 0) websocket.broadcast({ type: "achievements-changed", appID: String(appid), source: "steamAPI", time: Date.now() });
           await track.saveSteam(appid, steamId64, current);
         } catch (err) {
           const msg = (err && err.message) ? err.message : String(err);

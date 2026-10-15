@@ -37,12 +37,19 @@ const api = {
     testNotification: () => ipcRenderer.send('window:test-notification')
   },
 
+  // Auto-refresh de logros
+  achWatch: {
+    setTargets: (games) => ipcRenderer.invoke('achwatch:set', games),
+    onChange: (cb) => ipcRenderer.on('achievements-changed', (event, msg) => cb(msg))
+  },
+
   // Gestión del Watchdog (Lógica movida al Main)
   watchdog: {
     start: () => ipcRenderer.invoke('watchdog:start'),
     stop: () => ipcRenderer.invoke('watchdog:stop'),
     getPid: () => ipcRenderer.invoke('watchdog:getPid'),
-    ensure: () => ipcRenderer.invoke('watchdog:ensure')
+    ensure: () => ipcRenderer.invoke('watchdog:ensure'),
+    reportPong: (pid) => ipcRenderer.send('watchdog:pong', pid)
   }
 };
 

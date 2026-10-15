@@ -135,11 +135,32 @@ var app = {
          setTimeout(() => { app.wsWatchdog.spawnRequested = false; }, 4000);
        });
    }
-   function refreshGameFromWatchdog(appID, achName) {
+   // Debounced per-appid refresh: Watchdog + main-process watcher may both fire for the same change
+    const pendingRefresh = new Map();
+    function queueRefresh(appID, achName) {
+      const key = String(appID);
+      const prev = pendingRefresh.get(key);
+      if (prev) clearTimeout(prev.timer);
+      const name = achName || (prev && prev.achName) || "";
+      pendingRefresh.set(key, { achName: name, timer: setTimeout(() => { pendingRefresh.delete(key); refreshGameFromWatchdog(key, name); }, 400) });
+    }
+    app.queueRefresh = queueRefresh;
+    if (window.api && window.api.achWatch && !app._achWatchBound) {
+      app._achWatchBound = true;
+      window.api.achWatch.onChange((msg) => { if (msg && msg.appID) queueRefresh(msg.appID, msg.achievement); });
+    }
+    if (!app._focusRefreshBound) {
+      app._focusRefreshBound = true;
+      window.addEventListener("focus", () => {
+        const g = $("#achievement .header").data("currentGame");
+        if (g && $("#achievement").is(":visible")) queueRefresh(g.appid);
+      });
+    }
+    function refreshGameFromWatchdog(appID, achName) {
      if (!app.gameList || app.gameList.length === 0) return;
-     const game = app.gameList.find(g => String(g.appid) === String(appID));
-     if (!game) return;
-     achievements.refreshAchievements(game, self.config).then((refreshed) => {
+     const games = app.gameList.filter(g => String(g.appid) === String(appID));
+     if (games.length === 0) return;
+     games.forEach((game) => achievements.refreshAchievements(game, self.config).then((refreshed) => {
        if (!refreshed) return;
        const percent = game.achievement.total > 0 ? Math.round(100 * game.achievement.unlocked / game.achievement.total) : 0;
        const box = $(`#game-list .game-box[data-appid="${game.appid}"]`);
@@ -156,7 +177,7 @@ var app = {
        if (currentGame && String(currentGame.appid) === String(appID) && $("#achievement").is(":visible")) {
          app.renderAchievementList(game, percent, achName);
        }
-     }).catch((err) => { debug.log('refreshGameFromWatchdog', err); });
+     }).catch((err) => { debug.log('refreshGameFromWatchdog', err); }));
    }
    function connectWatchdog() {
       try {
@@ -171,7 +192,12 @@ var app = {
         app.wsWatchdog.socket = ws;
         ws.onopen = () => { 
           app.wsWatchdog.failedConnects = 0;
-          app.setWatchdogStatus?.(true);
+           app.setWatchdogStatus?.(true);
+           // WebSocket ping replaces netstat polling to know the Watchdog is alive (and its PID)
+           const ping = () => { try { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ cmd: "ping" })); } catch (e) {} };
+           ping();
+           if (app.wsWatchdog.pingTimer) clearInterval(app.wsWatchdog.pingTimer);
+           app.wsWatchdog.pingTimer = setInterval(ping, 15000);
           if (typeof window.stopWatchdogVerifier === "function") {
             window.stopWatchdogVerifier();
           }
@@ -180,6 +206,7 @@ var app = {
         };
        ws.onclose = () => { 
          if (app.wsWatchdog.socket === ws) app.wsWatchdog.socket = null;
+         if (app.wsWatchdog.pingTimer) { clearInterval(app.wsWatchdog.pingTimer); app.wsWatchdog.pingTimer = null; }
          app.setWatchdogStatus?.(false); 
          try { ws.close(); } catch (e) { debug.log('ws close', e); } 
          scheduleWatchdogReconnect();
@@ -201,10 +228,12 @@ var app = {
         ws.onmessage = (evt) => {
           try {
             const msg = JSON.parse(evt.data);
+            if (msg.cmd === "pong") { window.api?.watchdog?.reportPong?.(msg.pid); return; }
+            if (msg.cmd) return;
             const appID = String(msg.appID || msg.appid || "");
             const achName = msg.achievement || msg.achievementName || "";
             if (appID) {
-              refreshGameFromWatchdog(appID, achName);
+              queueRefresh(appID, achName);
             }
           } catch (e) { debug.log('ws message parse', e); }
         };
@@ -413,6 +442,11 @@ var app = {
       }
 
       app.gameList = list;
+      // Register achievement folders in the main-process backup watcher
+      try {
+        const targets = list.map(g => ({ appid: g.appid, paths: achievements.getWatchPaths(g) })).filter(t => t.paths.length > 0);
+        window.api?.achWatch?.setTargets(targets).then((n) => debug.log(`Auto-refresh watcher: ${n} folder(s)`)).catch(() => {});
+      } catch (e) { debug.log('achWatch setTargets', e); }
       $("#game-list .game-box").click(function(){ self.onGameBoxClick($(this),list) });
       
       $("#game-list .game-box").contextmenu(function(e) { 
@@ -435,7 +469,7 @@ var app = {
          {
            menu.append(new MenuItem({ label: "Actualizar logros", async click() {
              const game = list.find(g => g.appid == appid && list.indexOf(g) == self.data("index"));
-             if (game && game.data && (game.data.type === "file" || game.data.type === "cached" || game.data.type === "steamAPI")) {
+             if (game && game.data) {
                const refreshed = await achievements.refreshAchievements(game, app.config);
                if (refreshed) {
                  const idx = list.indexOf(game);
@@ -629,7 +663,7 @@ var app = {
             ${hiddenIcon}
             <div class="box">
               <div class="glow mask contain"><div class="glow mask ray "><div class="glow fx"></div></div></div>
-              <div class="icon" style="background: url('${achievement.Achieved ? achievement.icon : achievement.icongray}');"></div>
+              <div class="icon lazy-bg" data-bg="${achievement.Achieved ? achievement.icon : achievement.icongray}"></div>
             </div>
             <div class="content">
               <div class="ach-card-head">
@@ -680,6 +714,7 @@ var app = {
       lock.append(`<li id="hidden-disclaimer"><div class="achievement"><div class="icon"><i class="fas fa-plus" data-remaining="${hidden_counter}"></i></div><div class="content"><div class="title">${hidden_counter} ${$("#lock").data("lang-title")}</div><div class="description">${$("#lock").data("lang-message")}</div></div><div class="show-hidden"><div id="btn-show-hidden">${$("#lock").data("lang-hidden")}</div></div></div></li>`);
       $("#btn-show-hidden").off("click").click(function(){ $(this).css("pointer-events","none"); $("#lock ul li.hidden").insertAfter("#hidden-disclaimer"); $("#hidden-disclaimer").fadeOut(400, function(){ $("#lock ul li:not(#hidden-disclaimer)").fadeIn(800); }); });
     }
+    app.lazyLoadIcons();
     if (game.system) $(".achievement .stats .community").hide();
     else { $(".achievement .stats .community").show(); getSteamGlobalStat(game.appid); }
     if (highlightAchievementName) {
@@ -703,10 +738,21 @@ var app = {
       $("#user-info .info .stats li:eq(0) span.data").text(list.filter(g => g.achievement.unlocked > 0).reduce((acc, curr) => acc + parseInt(curr.achievement.unlocked), 0));
     }
   },
+  lazyLoadIcons: function(){
+    const nodes = document.querySelectorAll("#achievement .icon.lazy-bg[data-bg]");
+    const load = (el) => { const url = el.getAttribute("data-bg"); if (url) { el.style.backgroundImage = `url('${url.replace(/'/g, "%27")}')`; } el.removeAttribute("data-bg"); el.classList.add("loaded"); };
+    if (!("IntersectionObserver" in window)) { nodes.forEach(load); return; }
+    if (!app._iconObserver) {
+      app._iconObserver = new IntersectionObserver((entries) => {
+        entries.forEach((e) => { if (e.isIntersecting) { load(e.target); app._iconObserver.unobserve(e.target); } });
+      }, { root: null, rootMargin: "300px 0px" });
+    }
+    nodes.forEach((el) => app._iconObserver.observe(el));
+  },
   refreshCurrentGame: async function(newlyUnlockedName){
     const game = $("#achievement .header").data("currentGame");
-    if (!game || !game.appid || game.system === "playstation" || game.system === "uplay") return;
-    if (!game.data || (game.data.type !== "file" && game.data.type !== "cached" && game.data.type !== "steamAPI" && game.data.type !== "lumaplay")) return;
+    if (!game || !game.appid) return;
+    if (!game.data) return;
     const btn = $("#btn-refresh-ach");
     if (btn.length) btn.addClass("refreshing").css("pointer-events","none");
     try {
@@ -789,7 +835,7 @@ var app = {
             }
             if (game.system === "playstation" || game.system === "uplay") notifyStatus.hide();
             $("#achievement .header").data("currentGame", game);
-            if (game.system === "playstation" || game.system === "uplay") { $("#btn-reset-track").hide(); $("#btn-refresh-ach").hide(); $("#btn-master-unlock").hide(); } else { $("#btn-reset-track").show(); $("#btn-refresh-ach").show(); if (typeof window.syncMasterButtons === "function") window.syncMasterButtons(); }
+            if (game.system === "playstation" || game.system === "uplay") { $("#btn-reset-track").hide(); $("#btn-refresh-ach").show(); $("#btn-master-unlock").hide(); } else { $("#btn-reset-track").show(); $("#btn-refresh-ach").show(); if (typeof window.syncMasterButtons === "function") window.syncMasterButtons(); }
             if (game.system !== "playstation" && game.system !== "uplay"){
               PlaytimeTracking(game.appid).then(({playtime, lastplayed})=>{
                 if(playtime > 0) {

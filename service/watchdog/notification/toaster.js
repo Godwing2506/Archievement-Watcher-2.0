@@ -97,6 +97,7 @@ module.exports = async (message, option = {}) => {
 				debug.log("Websocket broadcast");
 				
 				let notification = {
+					type: "notification",
 					appID: message.appid,
 					game: message.gameDisplayName,
 					achievement: message.achievementName,

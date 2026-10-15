@@ -142,7 +142,11 @@ function incoming(message){
        throw new Error(`request is not a valid JSON > ${err}`);
      }
 
-     if (req.cmd === "test") 
+     if (req.cmd === "ping")
+     {
+        this.send(JSON.stringify({ cmd: "pong", pid: process.pid, time: Date.now() }));
+     }
+     else if (req.cmd === "test") 
      {
         debug.log(`WS[${this.id}] received command 'test'`);
                 

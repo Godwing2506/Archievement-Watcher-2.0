@@ -183,7 +183,7 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
        const pid = await window.api.watchdog.getPid();
 
        if (ok) {
-        el.text(`Watchdog activo (ws://localhost:8082) PID ${pid ?? 'N/A'}`);
+        el.text(`Watchdog activo (ws://localhost:8082) PID ${(pid && pid > 0) ? pid : 'N/A'}`);
         infoEl.text("");
       } else {
         el.text(`Watchdog inactivo`);

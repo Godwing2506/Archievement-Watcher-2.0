@@ -16,7 +16,9 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const cp = require("child_process");
+const net = require("net");
 const ipc = require(path.join(__dirname,"ipc.js"));
+const achWatcher = require(path.join(__dirname,"achWatcher.js"));
 
 // Force cache dir to a writable location
 (function setWritableCacheDir() {
@@ -168,38 +170,44 @@ try {
     //enable ipc
     ipc.window(MainWin);
 
-    // Función auxiliar para obtener el PID del Watchdog
+    // Backup achievement watcher (independent from the Watchdog service)
+    achWatcher.init((msg) => {
+      if (MainWin && !MainWin.isDestroyed()) MainWin.webContents.send('achievements-changed', msg);
+    });
+    ipcMain.handle('achwatch:set', (event, games) => achWatcher.setTargets(games));
+
+    // Watchdog liveness: cheap TCP probe on 8082 + PID reported by the renderer's WebSocket ping/pong.
+    // netstat is only used as a last resort when we need a PID to kill a stale process.
     let watchdogPidCache = { pid: null, at: 0 };
-    const getWatchdogPid = () => {
-      return new Promise((resolve) => {
-        const now = Date.now();
-        if (now - watchdogPidCache.at < 400) {
-          return resolve(watchdogPidCache.pid);
-        }
-        try {
-          cp.exec(`netstat -ano | findstr :8082`, { windowsHide: true }, (err, stdout) => {
-            if (err || !stdout) {
-              watchdogPidCache = { pid: null, at: now };
-              return resolve(null);
-            }
-            const lines = stdout.split('\r\n').filter(l => l.includes(':8082'));
-            const listeningLine = lines.find(l => l.includes('LISTENING') || l.includes('ESCUCHANDO'));
-            if (listeningLine) {
-              const parts = listeningLine.trim().split(/\s+/);
-              const pid = parseInt(parts[parts.length - 1], 10);
-              const resolved = Number.isFinite(pid) ? pid : null;
-              watchdogPidCache = { pid: resolved, at: now };
-              resolve(resolved);
-            } else {
-              watchdogPidCache = { pid: null, at: now };
-              resolve(null);
-            }
-          });
-        } catch (e) {
-          watchdogPidCache = { pid: null, at: now };
-          resolve(null);
-        }
-      });
+    let lastPongPid = null;
+    ipcMain.on('watchdog:pong', (event, pid) => { if (Number.isFinite(+pid)) lastPongPid = +pid; });
+    const probePort = () => new Promise((resolve) => {
+      const sock = net.connect({ port: 8082, host: '127.0.0.1' });
+      const done = (ok) => { try { sock.destroy(); } catch (e) {} resolve(ok); };
+      sock.setTimeout(400, () => done(false));
+      sock.once('connect', () => done(true));
+      sock.once('error', () => done(false));
+    });
+    const netstatPid = () => new Promise((resolve) => {
+      try {
+        cp.exec(`netstat -ano | findstr :8082`, { windowsHide: true }, (err, stdout) => {
+          if (err || !stdout) return resolve(null);
+          const line = stdout.split('\r\n').find(l => l.includes(':8082') && (l.includes('LISTENING') || l.includes('ESCUCHANDO')));
+          if (!line) return resolve(null);
+          const pid = parseInt(line.trim().split(/\s+/).pop(), 10);
+          resolve(Number.isFinite(pid) ? pid : null);
+        });
+      } catch (e) { resolve(null); }
+    });
+    // Returns a truthy value (PID if known, otherwise -1) when the Watchdog is listening, null otherwise
+    const getWatchdogPid = async () => {
+      const now = Date.now();
+      if (now - watchdogPidCache.at < 400) return watchdogPidCache.pid;
+      const alive = await probePort();
+      const pid = alive ? (lastPongPid || -1) : null;
+      if (!alive) lastPongPid = null;
+      watchdogPidCache = { pid, at: now };
+      return pid;
     };
 
     // Manejadores IPC para la API expuesta en preload.js
@@ -253,7 +261,8 @@ try {
 
     // Helper: kill anything listening on port 8082 and clean up single-instance pipe
     const killPort8082 = async () => {
-      const pid = await getWatchdogPid();
+      let pid = await getWatchdogPid();
+      if (pid === -1) pid = await netstatPid();
       if (pid) {
         logMain(`[Watchdog] Puerto 8082 ocupado por PID ${pid}. Intentando terminar...`);
         await new Promise((resolve) => {
@@ -471,7 +480,8 @@ try {
     ipcMain.handle('watchdog:start', async () => doSpawnWatchdog());
 
     ipcMain.handle('watchdog:stop', async () => {
-      const pid = await getWatchdogPid();
+      let pid = await getWatchdogPid();
+      if (pid === -1) pid = await netstatPid();
       if (pid) {
         cp.spawn("powershell", ["-NoProfile", "-Command", `Stop-Process -Id ${pid} -Force`]);
         return true;
