@@ -19,7 +19,8 @@ if %ERRORLEVEL% NEQ 0 (
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup\prepare_watchdog.ps1"
 if %ERRORLEVEL% NEQ 0 (
-  echo WARN: prepare_watchdog.ps1 returned an error. Continuing anyway...
+  echo ERROR: Watchdog preparation failed. Refusing to build an incomplete installer.
+  exit /b 1
 )
 
 call "%~dp0setup\mkasar.cmd"

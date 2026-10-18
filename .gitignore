@@ -5,4 +5,6 @@ service/updater/node_modules/
 service/watchdog/node_modules/
 service/watchdog/_wip_
 setup/_dist_/
+setup/_watchdog_runtime/
 *.log
+node_modules

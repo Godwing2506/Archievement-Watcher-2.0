@@ -34,13 +34,22 @@ if (-not (Test-Path -LiteralPath $srcExe)) { throw "node.exe not found in archiv
 $npmCli = Join-Path $srcNodeRoot "node_modules\npm\bin\npm-cli.js"
 if (-not (Test-Path -LiteralPath $npmCli)) { throw "npm CLI not found in node distribution" }
 $watchdogDir = Join-Path $root "service\watchdog"
+$watchdogRuntimeDir = Join-Path $PSScriptRoot "_watchdog_runtime"
+if (Test-Path -LiteralPath $watchdogRuntimeDir) {
+  Remove-Item -LiteralPath $watchdogRuntimeDir -Recurse -Force
+}
+Ensure-Dir $watchdogRuntimeDir
+Copy-Item -LiteralPath (Join-Path $watchdogDir "package.json") -Destination $watchdogRuntimeDir
+Copy-Item -LiteralPath (Join-Path $watchdogDir "package-lock.json") -Destination $watchdogRuntimeDir
+
 Write-Host "Installing watchdog dependencies with Node $nodeVersion ..."
+Push-Location $watchdogRuntimeDir
 try {
-  Push-Location $watchdogDir
-  & $srcExe $npmCli ci --ignore-scripts
-  & $srcExe $npmCli prune --production --ignore-scripts
-} catch {
-  Write-Warning "Dependency installation failed or skipped. Proceeding with existing node_modules."
+  & $srcExe $npmCli ci --omit=dev --ignore-scripts
+  if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
+
+  & $srcExe -e "require('execa')"
+  if ($LASTEXITCODE -ne 0) { throw "Watchdog runtime dependency check failed with exit code $LASTEXITCODE" }
 } finally {
   Pop-Location
 }

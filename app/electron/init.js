@@ -337,7 +337,8 @@ try {
           });
           proc.on('exit', (code) => {
             logMain('[Watchdog] Process exited with code ' + code + ' for ' + bin);
-            // No marcar fallo aquí: tras login Windows node puede salir antes de abrir el puerto.
+            // The spawned process is the Watchdog itself, so any exit before the port opens is a failure.
+            finish({ ok: false, pid: null });
           });
           proc.unref();
           logMain('[Watchdog] Spawned PID: ' + proc.pid + ' using ' + bin);
