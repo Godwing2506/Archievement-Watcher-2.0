@@ -225,15 +225,18 @@
       "exportButton": "Export backup",
       "exportHelp": "Saves a .awbackup.zip file (e.g. to Downloads or a USB drive).",
       "importButton": "Restore from file",
-      "importHelp": "Overwrites matching data in this installation. You may import .awbackup.zip or options.ini to restore settings and local progress.",
+      "importHelp": "Restore settings and local progress from .awbackup.zip. You may also import options.ini to restore settings only.",
       "exportSuccessTitle": "Backup created",
       "exportSuccessMessage": "Your data was exported successfully.",
       "importConfirmTitle": "Restore backup?",
       "importConfirmMessage": "Current settings and local progress will be replaced by the backup. Continue?",
+      "importConfigConfirmMessage": "Only the settings in this file will be restored. Continue?",
       "importSuccessTitle": "Backup restored",
       "importSuccessMessage": "Data restored. The app will reload to apply changes.",
       "errorInvalid": "The file is not a valid Achievement Watcher backup.",
       "errorVersion": "This backup was created with a newer format. Update the app and try again.",
+      "errorNotFound": "The backup file could not be found.",
+      "errorWrite": "Could not write the backup. Check free space and write permissions.",
       "errorGeneric": "Backup operation failed."
     }
   } 

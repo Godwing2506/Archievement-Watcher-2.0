@@ -775,12 +775,19 @@ var app = {
         self.css("pointer-events","none");
 
         let game = list.find( elem => elem.appid == self.data("appid") && list.indexOf(elem) == self.data("index"));
+        if (!game) {
+          self.css("pointer-events","initial");
+          return;
+        }
+
+        $("#game-list .game-box").removeClass("selected");
+        self.addClass("selected");
+        $("body").addClass("split-view");
+        $("#achievement").stop(true,true);
 
         if (self.data('time') > 0) $("#achievement .ach-toolbar-sort .sort.time").addClass("show");
         
         $("#search-bar-float input[type=search]").val("").blur().removeClass("has"); //reset
-        
-        $("#home").fadeOut(function() {
             
             if(game.img.background) {
 
@@ -860,6 +867,7 @@ var app = {
             
             $("#achievement .ach-toolbar-sort .sort.time").removeClass("active");
             app.renderAchievementList(game, self.find(".progressBar").data("percent"));
+            $("#achievement").scrollTop(0);
 
             let elem = $("#achievement .achievement-list ul > li");
             elem.removeClass("highlight");
@@ -875,10 +883,8 @@ var app = {
                     scrollTop:(pos)
                   }, 250, 'swing');
               }
-            
                 self.css("pointer-events","initial");
             });
-        });
       }
 };
 

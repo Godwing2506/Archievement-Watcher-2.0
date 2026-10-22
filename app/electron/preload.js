@@ -25,6 +25,7 @@ const api = {
 
   // Diálogos (para seleccionar carpetas de usuario)
   showOpenDialog: (options) => ipcRenderer.invoke('dialog:showOpenDialog', options),
+  showSaveDialog: (options) => ipcRenderer.invoke('dialog:showSaveDialog', options),
   showMessageBox: (options) => ipcRenderer.invoke('dialog:showMessageBox', options),
 
   // Control de Ventana y Pruebas

@@ -9,6 +9,9 @@ function userDirModule() {
 function blacklistModule() {
   return require(require('path').join(window.appPath, 'parser/blacklist.js'));
 }
+function backupModule() {
+  return require(require('path').join(window.appPath, 'util/backup.js'));
+}
 
 // Watchdog functions
 async function checkWatchdog(){
@@ -751,6 +754,8 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
         const code = err && err.message ? err.message : String(err);
         if (code === 'ERR_BACKUP_INVALID') return backupL10n('errorInvalid', 'Invalid backup file.');
         if (code === 'ERR_BACKUP_VERSION') return backupL10n('errorVersion', 'Unsupported backup version.');
+        if (code === 'ERR_BACKUP_NOT_FOUND') return backupL10n('errorNotFound', 'Backup file was not found.');
+        if (code === 'ERR_BACKUP_WRITE_FAILED') return backupL10n('errorWrite', 'Could not write backup. Check free space and permissions.');
         return backupL10n('errorGeneric', 'Backup operation failed.') + (code ? `\n${code}` : '');
       }
 
@@ -758,23 +763,25 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
         const self = $(this);
         self.css("pointer-events", "none");
         try {
-          const userProfile = await window.api.getEnv('USERPROFILE');
-          const defaultPath = await window.api.pathJoin(userProfile, "Downloads"); 
-          const dialog = await window.api.showOpenDialog({ // Asumimos una wrapper para showSaveDialog similar
+          const backup = backupModule();
+          const downloads = await window.api.getPath("downloads");
+          const defaultPath = await window.api.pathJoin(downloads, backup.defaultBackupFilename());
+          const dialog = await window.api.showSaveDialog({
             title: backupL10n("exportButton", "Export backup"),
             defaultPath,
             filters: [{ name: "Achievement Watcher Backup", extensions: ["zip"] }]
           });
           if (dialog.canceled || !dialog.filePath) return;
-          let out = dialog.filePath;
-          
-          window.api.showMessageBox({
+
+          const result = await backup.exportBackup(dialog.filePath);
+          await window.api.showMessageBox({
             type: "info",
             title: backupL10n("exportSuccessTitle", "Backup created"),
-            message: backupL10n("exportSuccessMessage", "Export completed.")
+            message: backupL10n("exportSuccessMessage", "Export completed."),
+            detail: `${result.stats.files} archivo(s), ${Math.ceil(result.stats.bytes / 1024)} KB`
           });
         } catch (err) {
-          window.api.showMessageBox({
+          await window.api.showMessageBox({
             type: "error",
             title: backupL10n("errorGeneric", "Error"),
             message: backupErrorMessage(err)
@@ -791,22 +798,38 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
           const dialog = await window.api.showOpenDialog({
             title: backupL10n("importButton", "Restore from file"),
             properties: ["openFile"],
-            filters: [{ name: "Achievement Watcher Backup / Config", extensions: ["zip", "awbackup", "ini"] }]
+            filters: [{ name: "Achievement Watcher Backup / Config", extensions: ["zip", "ini"] }]
           });
           if (dialog.canceled || !dialog.filePaths || !dialog.filePaths[0]) return;
           const filePath = dialog.filePaths[0];
+          const isConfig = require("path").extname(filePath).toLowerCase() === ".ini";
+          const backup = backupModule();
+          if (isConfig) {
+            await backup.validateConfig(filePath);
+          } else {
+            await backup.validateBackup(filePath);
+          }
           const confirm = await window.api.showMessageBox({
             type: "warning",
             title: backupL10n("importConfirmTitle", "Restore backup?"),
-            message: backupL10n("importConfirmMessage", "Replace current data with the selected file?"),
+            message: isConfig
+              ? backupL10n("importConfigConfirmMessage", "Restore the settings from this file?")
+              : backupL10n("importConfirmMessage", "Restore settings and local progress from this backup?"),
             buttons: [backupL10n("cancel", "Cancel"), backupL10n("importButton", "Restore")],
             defaultId: 0,
             cancelId: 0
           });
-          // ... lógica de restauración ...
+          if (confirm.response !== 1) return;
+          if (isConfig) await backup.importConfig(filePath);
+          else await backup.importBackup(filePath);
+          await window.api.showMessageBox({
+            type: "info",
+            title: backupL10n("importSuccessTitle", "Backup restored"),
+            message: backupL10n("importSuccessMessage", "Data restored. The app will reload to apply changes.")
+          });
           location.reload();
         } catch (err) {
-          window.api.showMessageBox({
+          await window.api.showMessageBox({
             type: "error",
             title: backupL10n("errorGeneric", "Error"),
             message: backupErrorMessage(err)

@@ -50,6 +50,7 @@ function getSteamGlobalStat(appid) {
         
         $("#achievement").fadeOut(500,function() {
             setTimeout(()=>{  
+              $("body").removeClass("split-view");
               $("body").removeAttr("style");
               $(".achievement-list > .header .sort-ach .sort, .ach-toolbar-sort .sort").removeClass("show active");
               $("#home").fadeIn(500,function() {
@@ -57,6 +58,13 @@ function getSteamGlobalStat(appid) {
               });
             }, 300);
         }).scrollTop(0);
+    });
+
+    $("#home").on("wheel", function(e) {
+      if (!document.body.classList.contains("split-view") || $(e.target).closest("#game-list").length) return;
+      const gameList = $("#game-list");
+      gameList.scrollTop(gameList.scrollTop() + e.originalEvent.deltaY);
+      e.preventDefault();
     });
 
     $("#btn-refresh-ach").click(async function(){

@@ -8,3 +8,17 @@ setup/_dist_/
 setup/_watchdog_runtime/
 *.log
 node_modules
+
+# Binarios y descargas de setup
+setup/*.zip
+setup/*_tmp/
+setup/{{app}}/*.exe
+setup/{{app}}/*.dll
+setup/unicode/*.dll
+setup/{{appData}}/*.ini
+
+# Temporales de compilación y pruebas
+*.txt
+temp_asar_extract/
+temp_test/
+tmp_remote_extract/

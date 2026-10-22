@@ -250,6 +250,7 @@ try {
     ipcMain.handle('shell:showItemInFolder', (event, path) => shell.showItemInFolder(path));
 
     ipcMain.handle('dialog:showOpenDialog', (event, options) => dialog.showOpenDialog(MainWin, options));
+    ipcMain.handle('dialog:showSaveDialog', (event, options) => dialog.showSaveDialog(MainWin, options));
     ipcMain.handle('dialog:showMessageBox', (event, options) => dialog.showMessageBox(MainWin, options));
 
     ipcMain.on('window:minimize', () => { if (MainWin) MainWin.minimize(); });

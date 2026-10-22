@@ -220,15 +220,18 @@
       "exportButton": "Exportar copia de seguridad",
       "exportHelp": "Guarda un archivo .awbackup.zip (por ejemplo en Descargas o un USB).",
       "importButton": "Restaurar desde archivo",
-      "importHelp": "Sustituye los datos actuales de esta instalación. Puedes importar .awbackup.zip u options.ini para restaurar ajustes y progreso local.",
+      "importHelp": "Restaura ajustes y progreso local desde .awbackup.zip. También puedes importar options.ini para restaurar solo los ajustes.",
       "exportSuccessTitle": "Copia creada",
       "exportSuccessMessage": "Tus datos se exportaron correctamente.",
       "importConfirmTitle": "¿Restaurar copia?",
       "importConfirmMessage": "Los ajustes y el progreso local actuales serán reemplazados por la copia. ¿Continuar?",
+      "importConfigConfirmMessage": "Se restaurarán solo los ajustes de este archivo. ¿Continuar?",
       "importSuccessTitle": "Copia restaurada",
       "importSuccessMessage": "Datos restaurados. La app se recargará para aplicar los cambios.",
       "errorInvalid": "El archivo no es una copia válida de Achievement Watcher.",
       "errorVersion": "Esta copia usa un formato más nuevo. Actualiza la app e inténtalo de nuevo.",
+      "errorNotFound": "No se encontró el archivo de copia de seguridad.",
+      "errorWrite": "No se pudo guardar la copia. Comprueba el espacio disponible y los permisos.",
       "errorGeneric": "Error en la operación de copia de seguridad."
     }
   } 
