@@ -8,7 +8,6 @@ const ini = require("@xan105/ini");
 const omit = require('lodash.omit');
 const moment = require('moment');
 const request = require('request-zero');
-const urlParser = require('url');
 const ffs = require("@xan105/fs");
 const regedit = require('../util/reg_shim');
 
@@ -156,76 +155,106 @@ module.exports.scan = async (additionalSearch = []) => {
     
     // Scan numeric folders
     const tNum = Date.now();
-    for (let dir of await glob(numericSearch,{onlyDirectories: true, absolute: true, suppressErrors: true})) {
-                if (dir.includes("Goldberg")) continue;
-    
-                let game = { 
-                    appid: path.parse(dir).name, 
-                    data: {
-                      type: "file",
-                      path: dir }
-                };
-                
-                if (dir.includes("CODEX")) {
-                  game.source = "Codex";
-                } else if (dir.includes("EMPRESS")){
-                  game.source = "Goldberg (EMPRESS)";
-                  game.data.path = path.join(game.data.path,"remote",game.appid);
-                } else if (dir.includes("SKIDROW")){
-                  game.source = "Skidrow";
-                } else if (dir.includes("SmartSteamEmu")){
-                  game.source = "SmartSteamEmu";
-                } else if (dir.includes("ProgramData/Steam")){
-                  game.source = "Reloaded - 3DM";
-                } else if (dir.includes("CreamAPI")){
-                  game.source = "CreamAPI";
-                } else if (dir.includes("RUNE")){
-                  game.source = "RUNE";
-                } else if (dir.includes("TENOKE")){
-                  game.source = "TENOKE";
-                } else if (dir.includes("DOGE")){
-                  game.source = "DOGE";
-                } else if (dir.includes("Fairlight")){
-                  game.source = "Fairlight";
-                } else if (dir.includes("FLT")){
-                  game.source = "FLT";
-                }
+    const numericDirs = await glob(numericSearch,{onlyDirectories: true, absolute: true, suppressErrors: true});
 
-                data.push(game);
+    // Source detection map for better performance
+    const sourceMap = [
+      { pattern: "CODEX", source: "Codex" },
+      { pattern: "EMPRESS", source: "Goldberg (EMPRESS)", modifyPath: (p, appid) => path.join(p, "remote", appid) },
+      { pattern: "SKIDROW", source: "Skidrow" },
+      { pattern: "SmartSteamEmu", source: "SmartSteamEmu" },
+      { pattern: "ProgramData/Steam", source: "Reloaded - 3DM" },
+      { pattern: "ProgramData\\Steam", source: "Reloaded - 3DM" },
+      { pattern: "CreamAPI", source: "CreamAPI" },
+      { pattern: "RUNE", source: "RUNE" },
+      { pattern: "TENOKE", source: "TENOKE" },
+      { pattern: "DOGE", source: "DOGE" },
+      { pattern: "Fairlight", source: "Fairlight" },
+      { pattern: "FLT", source: "FLT" }
+    ];
+
+    for (let dir of numericDirs) {
+      if (dir.includes("Goldberg")) continue;
+
+      const appid = path.parse(dir).name;
+
+      // Skip if not a valid Steam AppID format (numeric, reasonable length)
+      if (!isLikelySteamAppIdFolder(appid)) continue;
+
+      let game = {
+        appid: appid,
+        data: {
+          type: "file",
+          path: dir
+        }
+      };
+
+      // Detect source from path
+      for (const { pattern, source, modifyPath } of sourceMap) {
+        if (dir.includes(pattern)) {
+          game.source = source;
+          if (modifyPath) {
+            game.data.path = modifyPath(game.data.path, game.appid);
+          }
+          break;
+        }
+      }
+
+      // Skip duplicate entries (same appid already found)
+      if (!data.some(g => g.appid === appid && g.source === game.source)) {
+        data.push(game);
+      }
     }
 
     if (Date.now() - tNum > 1000) debug.log(`[DIAG] steam.scan numeric block took ${Date.now()-tNum}ms`);
 
-    // Scan for named folders with config files (new logic)
+    // Scan for named folders with config files (optimized parallel scan)
     const tNamed = Date.now();
-    const emuIniFiles = ["steam_emu.ini", "SteamConfig.ini", "valve.ini", "tenoke.ini", "RUNE.ini", "flt.ini", "Achievements.ini"];
-    for (let dir of await glob(namedSearch, { onlyDirectories: true, absolute: true, suppressErrors: true })) {
-      if (path.parse(dir).name.match(/^[0-9]+$/)) continue; // skip numeric folders already scanned
-      
-      for (const iniFile of emuIniFiles) {
-        const fullIni = path.join(dir, iniFile);
-        if (await ffs.exists(fullIni)) {
+    const emuIniFiles = ["steam_emu.ini", "SteamConfig.ini", "valve.ini", "tenoke.ini", "TENOKE.ini", "RUNE.ini", "rune.ini", "flt.ini", "FLT.ini", "Achievements.ini"];
+    const namedDirs = await glob(namedSearch, { onlyDirectories: true, absolute: true, suppressErrors: true });
+
+    const namedScanPromises = namedDirs
+      .filter(dir => !path.parse(dir).name.match(/^[0-9]+$/)) // skip numeric folders already scanned
+      .map(async (dir) => {
+        for (const iniFile of emuIniFiles) {
+          const fullIni = path.join(dir, iniFile);
           try {
-            let appid;
-            if (iniFile === "Achievements.ini") {
-              // Sometimes Achievements.ini is just there, we might not get AppID easily
-              // but we can try to find it in the path or skip if not found
-            } else {
-              const content = await ffs.readFile(fullIni, "utf8");
-              const parsed = ini.parse(content);
-              appid = parsed.Settings?.AppId || parsed.Settings?.AppID || parsed.GameSettings?.AppId || parsed.GameSettings?.AppID;
+            if (await ffs.exists(fullIni)) {
+              let appid;
+              if (iniFile === "Achievements.ini") {
+                // Sometimes Achievements.ini is just there without AppID in the file
+                continue;
+              } else {
+                const content = await ffs.readFile(fullIni, "utf8");
+                const parsed = ini.parse(content);
+                // Check multiple possible locations for AppID
+                appid = parsed.Settings?.AppId ||
+                        parsed.Settings?.AppID ||
+                        parsed.GameSettings?.AppId ||
+                        parsed.GameSettings?.AppID ||
+                        parsed.Config?.AppId ||
+                        parsed.Config?.AppID ||
+                        parsed.SteamClient?.AppId ||
+                        parsed.SteamClient?.AppID;
+              }
+
+              if (appid && !isNaN(appid)) {
+                return {
+                  appid: appid.toString(),
+                  source: "Emulator (Auto-detected)",
+                  data: { type: "file", path: dir }
+                };
+              }
             }
-            
-            if (appid) {
-              data.push({
-                appid: appid.toString(),
-                source: "Emulator (Auto-detected)",
-                data: { type: "file", path: dir }
-              });
-              break;
-            }
-          } catch (e) {}
+          } catch (e) { /* continue to next file */ }
         }
+        return null;
+      });
+
+    const namedResults = await Promise.all(namedScanPromises);
+    for (const result of namedResults) {
+      if (result && !data.some(g => g.appid === result.appid && g.data.path === result.data.path)) {
+        data.push(result);
       }
     }
 
@@ -378,26 +407,31 @@ module.exports.getGameData = async (cfg) => {
 module.exports.getAchievementsFromFile = async (filePath) => {
   try {
 
+  // Priority order: most common first for faster detection
   const files = [
-    "achievements.ini",
     "achievements.json",
-    "achiev.ini",
+    "achievements.ini",
+    "remote/achievements.json",
+    "remote/achievements.ini",
     "stats.ini",
+    "achiev.ini",
+    "stats.bin",
     "Achievements.Bin",
     "achieve.dat",
     "Achievements.ini",
     "stats/achievements.ini",
-    "remote/achievements.ini",
-    "remote/achievements.json",
-    "stats.bin",
     "stats/CreamAPI.Achievements.cfg",
     "SteamEmu/UserStats/achievements.ini",
     "SteamEmu/achievements.ini",
     "tenoke.ini",
+    "TENOKE.ini",
     "run.ini",
     "rune.ini",
+    "RUNE.ini",
     "data.ini",
-    "save.ini"
+    "save.ini",
+    "user_achievements.json",
+    "user_achievements.ini"
   ];
   
   const filter = ["SteamAchievements","Steam64","Steam"];
