@@ -1,0 +1,524 @@
+/*
+ * Achievement Watcher 2.0 - UI Improvements
+ * Mejoras visuales modernas y animaciones
+ * Fecha: 4 de Noviembre, 2026
+ */
+
+/* ============================================
+   1. ANIMACIONES DE CARGA MODERNAS
+   ============================================ */
+
+/* Skeleton loading para tarjetas de juegos */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.game-box.loading {
+  background: linear-gradient(
+    90deg,
+    rgba(30, 45, 61, 0.8) 0%,
+    rgba(40, 55, 71, 0.9) 50%,
+    rgba(30, 45, 61, 0.8) 100%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Barra de progreso con efecto de brillo mejorado */
+@keyframes progress-shine {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+#game-list .loading .progressBar > .meter {
+  background: linear-gradient(
+    90deg,
+    #4969af 0%,
+    #66c0f4 50%,
+    #4969af 100%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: progress-shine 2s linear infinite;
+  box-shadow: 0 0 10px rgba(102, 192, 244, 0.5),
+              0 0 20px rgba(102, 192, 244, 0.2);
+}
+
+/* ============================================
+   2. TOAST NOTIFICATIONS
+   ============================================ */
+
+.toast-notification {
+  position: fixed;
+  top: 50px;
+  right: 20px;
+  background: linear-gradient(135deg, #1e2d3d 0%, #2a3a4a 100%);
+  border: 1px solid rgba(102, 192, 244, 0.3);
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
+              0 0 20px rgba(102, 192, 244, 0.1);
+  transform: translateX(400px);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 350px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.toast-notification.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast-notification.success {
+  border-left: 4px solid #5cb85c;
+}
+
+.toast-notification.info {
+  border-left: 4px solid #66c0f4;
+}
+
+.toast-notification.warning {
+  border-left: 4px solid #f0ad4e;
+}
+
+.toast-notification.error {
+  border-left: 4px solid #d9534f;
+}
+
+.toast-notification .toast-icon {
+  font-size: 24px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.toast-notification.success .toast-icon {
+  color: #5cb85c;
+}
+
+.toast-notification.info .toast-icon {
+  color: #66c0f4;
+}
+
+.toast-notification.warning .toast-icon {
+  color: #f0ad4e;
+}
+
+.toast-notification.error .toast-icon {
+  color: #d9534f;
+}
+
+.toast-notification .toast-message {
+  flex: 1;
+  font-family: 'Open-Sans';
+  font-size: 14px;
+  color: #d9dfe4;
+  line-height: 1.4;
+}
+
+.toast-notification .toast-close {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  font-size: 18px;
+  color: #8f98a0;
+  min-width: 16px;
+  text-align: center;
+}
+
+.toast-notification .toast-close:hover {
+  opacity: 1;
+  color: #d9dfe4;
+}
+
+/* ============================================
+   3. GLASS MORPHISM EN TARJETAS
+   ============================================ */
+
+#game-list .game-box {
+  background: linear-gradient(
+    180deg,
+    rgba(30, 45, 61, 0.85) 0%,
+    rgba(22, 32, 43, 0.95) 100%
+  ) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(102, 192, 244, 0.15) !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 2px 4px rgba(102, 192, 244, 0.05) inset !important;
+}
+
+#game-list .game-box:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(30, 45, 61, 0.95) 0%,
+    rgba(22, 32, 43, 1) 100%
+  ) !important;
+  border-color: rgba(102, 192, 244, 0.4) !important;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.45),
+    0 0 30px rgba(102, 192, 244, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset !important;
+}
+
+/* Efecto parallax sutil en hover */
+#game-list .game-box .header {
+  transition: transform 0.3s ease;
+}
+
+#game-list .game-box:hover .header {
+  transform: scale(1.03);
+}
+
+/* ============================================
+   4. SCROLLBAR MODERNO
+   ============================================ */
+
+#game-list::-webkit-scrollbar {
+  width: 12px;
+}
+
+#game-list::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, #1a2332 0%, #0d1117 100%);
+  border-radius: 10px;
+  margin: 4px;
+}
+
+#game-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #4969af 0%, #66c0f4 100%);
+  border-radius: 10px;
+  border: 2px solid #1a2332;
+  transition: all 0.3s ease;
+}
+
+#game-list::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #5a7ac4 0%, #7dd0ff 100%);
+  box-shadow: 0 0 10px rgba(102, 192, 244, 0.5);
+}
+
+#game-list::-webkit-scrollbar-thumb:active {
+  background: #66c0f4;
+}
+
+/* Scrollbar para la lista de logros */
+#achievement .achievements::-webkit-scrollbar {
+  width: 12px;
+}
+
+#achievement .achievements::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, #1a2332 0%, #0d1117 100%);
+  border-radius: 10px;
+  margin: 4px;
+}
+
+#achievement .achievements::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #4969af 0%, #66c0f4 100%);
+  border-radius: 10px;
+  border: 2px solid #1a2332;
+  transition: all 0.3s ease;
+}
+
+#achievement .achievements::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #5a7ac4 0%, #7dd0ff 100%);
+  box-shadow: 0 0 10px rgba(102, 192, 244, 0.5);
+}
+
+/* ============================================
+   5. WATCHDOG INDICATOR MEJORADO
+   ============================================ */
+
+#watchdog-indicator {
+  font-size: 14px !important;
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: rgba(30, 45, 61, 0.6);
+  border: 1px solid rgba(92, 107, 122, 0.3);
+  transition: all 0.3s ease;
+}
+
+#watchdog-indicator i {
+  font-size: 14px;
+}
+
+#watchdog-indicator.connected {
+  color: #5cb85c !important;
+  border-color: rgba(92, 184, 92, 0.5);
+  background: rgba(92, 184, 92, 0.1);
+}
+
+#watchdog-indicator.connected::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5cb85c;
+  box-shadow: 0 0 10px #5cb85c;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+#watchdog-indicator.scanning {
+  color: #66c0f4;
+  border-color: rgba(102, 192, 244, 0.5);
+  background: rgba(102, 192, 244, 0.1);
+}
+
+#watchdog-indicator.scanning i {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   6. TRANSICIONES SUAVES ENTRE PÁGINAS
+   ============================================ */
+
+main > section {
+  transition:
+    opacity 0.4s cubic-bezier(0.4, 0.0, 0.2, 1),
+    transform 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+main > section.leaving {
+  opacity: 0;
+  transform: scale(0.98) translateY(-20px);
+  pointer-events: none;
+}
+
+main > section.entering {
+  opacity: 0;
+  transform: scale(1.02) translateY(20px);
+}
+
+@keyframes section-enter {
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+main > section.entering {
+  animation: section-enter 0.5s cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+}
+
+/* ============================================
+   7. TOOLTIPS MODERNOS
+   ============================================ */
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-5px);
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #2a3a4a 0%, #1e2d3d 100%);
+  color: #d9dfe4;
+  font-size: 13px;
+  font-family: 'Open-Sans';
+  border-radius: 6px;
+  border: 1px solid rgba(102, 192, 244, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  z-index: 1000;
+}
+
+[data-tooltip]::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #1e2d3d;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+[data-tooltip]:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+}
+
+/* ============================================
+   8. ANIMACIÓN DE ESTADÍSTICAS
+   ============================================ */
+
+@keyframes stat-highlight {
+  0% {
+    color: #d9dfe4;
+    transform: scale(1);
+  }
+  50% {
+    color: #66c0f4;
+    transform: scale(1.15);
+    text-shadow: 0 0 15px rgba(102, 192, 244, 0.6);
+  }
+  100% {
+    color: #d9dfe4;
+    transform: scale(1);
+  }
+}
+
+.stats .data.updated,
+.trophy span.updated {
+  animation: stat-highlight 0.6s ease-out;
+}
+
+/* ============================================
+   9. MEJORAS ADICIONALES
+   ============================================ */
+
+/* Botones con mejor feedback */
+.btn:active {
+  transform: scale(0.98);
+}
+
+/* Sort box mejorado */
+#sort-box .sort {
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+#sort-box .sort:active {
+  transform: scale(0.95);
+}
+
+/* Search bar con mejor focus */
+#search-bar input:focus,
+#search-bar-float input:focus {
+  box-shadow: 0 0 0 2px rgba(102, 192, 244, 0.3),
+              0 4px 12px rgba(102, 192, 244, 0.2);
+  border-color: rgba(102, 192, 244, 0.5);
+}
+
+/* Settings overlay mejorado */
+#settings .overlay {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+#settings .box {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6),
+              0 0 1px rgba(102, 192, 244, 0.3);
+}
+
+/* Achievement cards con mejor hover */
+.achievement:hover {
+  transform: translateX(4px);
+  box-shadow: -4px 0 12px rgba(102, 192, 244, 0.15);
+}
+
+/* ============================================
+   10. MICRO-INTERACCIONES
+   ============================================ */
+
+/* Ripple effect para clics (opcional) */
+@keyframes ripple {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(102, 192, 244, 0.5);
+  width: 20px;
+  height: 20px;
+  transform: scale(0);
+  animation: ripple 0.6s ease-out;
+  pointer-events: none;
+}
+
+/* Loading spinner mejorado */
+@keyframes spinner-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  border: 3px solid rgba(102, 192, 244, 0.1);
+  border-top-color: #66c0f4;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+/* Fade in para elementos que aparecen */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* Mejora de contraste para accesibilidad */
+@media (prefers-contrast: high) {
+  #game-list .game-box {
+    border-width: 2px !important;
+  }
+
+  .toast-notification {
+    border-width: 2px;
+  }
+}
+
+/* Reducir animaciones si el usuario lo prefiere */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
