@@ -814,11 +814,7 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
             for (let dir of await userDirModule().find())
             {
               console.log(`Found folder: ${dir}`);
-              if(await userDirModule().check(dir)) { //redundant ?
-                await populateUserDirList({dir: dir});
-              } else {
-                console.log("-> Invalid folder");
-              } 
+              await populateUserDirList({dir: dir});
             }
             
           }catch(err){

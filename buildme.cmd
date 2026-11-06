@@ -40,12 +40,14 @@ ping -n 2 127.0.0.1 >nul
 
 rem Search for Inno Setup compiler in common locations
 set "ISCC="
-set "ISCC_CANDIDATES[0]=C:\Program Files (x86)\Inno Setup 6\iscc.exe"
-set "ISCC_CANDIDATES[1]=C:\Program Files\Inno Setup 6\iscc.exe"
-set "ISCC_CANDIDATES[2]=C:\Program Files (x86)\Inno Setup 5\iscc.exe"
-set "ISCC_CANDIDATES[3]=C:\Program Files\Inno Setup 5\iscc.exe"
+set "ISCC_CANDIDATES[0]=C:\Program Files\Inno Setup 7\iscc.exe"
+set "ISCC_CANDIDATES[1]=C:\Program Files (x86)\Inno Setup 7\iscc.exe"
+set "ISCC_CANDIDATES[2]=C:\Program Files (x86)\Inno Setup 6\iscc.exe"
+set "ISCC_CANDIDATES[3]=C:\Program Files\Inno Setup 6\iscc.exe"
+set "ISCC_CANDIDATES[4]=C:\Program Files (x86)\Inno Setup 5\iscc.exe"
+set "ISCC_CANDIDATES[5]=C:\Program Files\Inno Setup 5\iscc.exe"
 
-for /L %%i in (0,1,3) do (
+for /L %%i in (0,1,5) do (
   if exist "!ISCC_CANDIDATES[%%i]!" (
     set "ISCC=!ISCC_CANDIDATES[%%i]!"
     goto :found_iscc
@@ -61,7 +63,7 @@ for %%p in (iscc.exe) do (
 )
 
 echo ERROR: Inno Setup compiler ^(iscc.exe^) not found.
-echo Please install Inno Setup 6 from https://jrsoftware.org/isdl.php
+echo Please install Inno Setup 7, 6, or 5 from https://jrsoftware.org/isdl.php
 echo After installation, make sure iscc.exe is in one of the standard paths or in your PATH.
 exit /b 1
 

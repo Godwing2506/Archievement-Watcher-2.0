@@ -3,9 +3,9 @@
 ## Requisitos previos
 
 1. **Node.js 20.x** (x64) con npm instalado.
-2. **Inno Setup 6** en `C:\Program Files (x86)\Inno Setup 6\`.  
+2. **Inno Setup 7, 6 o 5** en una ruta de instalación estándar.
    El ejecutable que usa el script es: `ISCC.exe`.  
-   Si lo tienes en otra ruta, edita la última línea de `buildme.cmd`.
+   `buildme.cmd` busca automáticamente en `Program Files`, `Program Files (x86)` y en `PATH`.
 3. **Herramientas globales (opcional, para mkasar):**
    - `asar`: `npm install -g asar`
    - `json`: `npm install -g json`  
@@ -63,7 +63,7 @@ El script hace, en este orden:
   `npm install -g asar json`
 
 - **“iscc.exe no encontrado”**  
-  Instala Inno Setup 6 o cambia la ruta en la última línea de `buildme.cmd` para que apunte a tu `ISCC.exe`.
+  Instala Inno Setup 7, 6 o 5, o agrega la carpeta que contiene `ISCC.exe` al `PATH`.
 
 - **prepare_watchdog.ps1 tarda mucho**  
   Es normal: descarga Node, descomprime e instala dependencias del watchdog. Déjalo terminar.

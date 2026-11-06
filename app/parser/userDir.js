@@ -7,9 +7,11 @@ const parentFind = require('find-up');
 const glob = require("fast-glob");
 const ffs = require("@xan105/fs");
 const listDrive = require(path.join(appPath,"util/listDrive.js"));
+const { allSettledLimited } = require(path.join(appPath,"util/concurrency.js"));
 const regedit = require('../util/reg_shim');
 
 const file = path.join(remote.app.getPath('userData'),"cfg/userdir.db");
+const SEARCH_CONCURRENCY = 2;
 
 const steam_emu_cfg_file_supported = [
   "ALI213.ini", 
@@ -82,16 +84,6 @@ module.exports.find = async () => {
         process.env['ProgramData'] || path.join(process.env['SystemDrive'] || 'C:', 'ProgramData')
       ].filter(Boolean);
 
-      for (const basePath of userPaths) {
-        try {
-          if (!(await ffs.exists(basePath))) continue;
-          const files = await glob(searchPatterns, { cwd: basePath, ignore, onlyFiles: true, absolute: true, suppressErrors: true });
-          files.forEach(f => foundDirs.add(path.parse(f).dir));
-          const appidDirs = await glob("[0-9]+", { cwd: basePath, onlyDirectories: true, absolute: true, suppressErrors: true });
-          appidDirs.forEach(f => foundDirs.add(path.parse(f).dir));
-        } catch (e) { /* skip */ }
-      }
-
       // 2. Search common game install roots on each drive (avoid scanning entire disks)
       let drives = [];
       try {
@@ -112,14 +104,55 @@ module.exports.find = async () => {
         path.join(drive, 'XboxGames')
       ];
 
+      const roots = [];
+      const seenRoots = new Set();
+      const normalizeRoot = (root) => path.win32.normalize(root).replace(/[\\/]+$/, "").toLowerCase();
+      const addRoot = (root, scanAppIds, deep) => {
+        const key = normalizeRoot(root);
+        if (seenRoots.has(key)) return;
+        seenRoots.add(key);
+        roots.push({ path: root, scanAppIds, deep });
+      };
+
+      for (const basePath of userPaths) addRoot(basePath, true);
       for (const drive of drives) {
-        for (const root of driveRoots(drive)) {
-          try {
-            if (!(await ffs.exists(root))) continue;
-            const files = await glob(searchPatterns, { cwd: root, ignore, onlyFiles: true, absolute: true, suppressErrors: true, deep: 8 });
-            files.forEach(f => foundDirs.add(path.parse(f).dir));
-          } catch (e) { /* skip */ }
+        for (const root of driveRoots(drive)) addRoot(root, false, 8);
+      }
+
+      const settled = await allSettledLimited(roots, SEARCH_CONCURRENCY, async (root) => {
+        try {
+          if (!(await ffs.exists(root.path))) return [];
+
+          const options = {
+            cwd: root.path,
+            ignore,
+            onlyFiles: true,
+            absolute: true,
+            suppressErrors: true
+          };
+          if (root.deep !== undefined) options.deep = root.deep;
+          const files = await glob(searchPatterns, options);
+          const dirs = files.map(f => path.parse(f).dir);
+
+          if (root.scanAppIds) {
+            const appidDirs = await glob("[0-9]+", {
+              cwd: root.path,
+              onlyDirectories: true,
+              absolute: true,
+              suppressErrors: true
+            });
+            dirs.push(...appidDirs.map(f => path.parse(f).dir));
+          }
+
+          return dirs;
+        } catch (e) {
+          return [];
         }
+      });
+
+      for (const result of settled) {
+        if (result.status !== "fulfilled") continue;
+        for (const dir of result.value) foundDirs.add(dir);
       }
 
       return [...foundDirs];

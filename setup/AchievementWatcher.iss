@@ -114,7 +114,6 @@ Source: "..\app\node_modules\electron\dist\locales\en-GB.pak"; DestDir: "{app}\l
 Source: "..\service\*"; Excludes: "\buildme.cmd,\watchdog\_wip_,\watchdog\patches,\watchdog\node_modules"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;
 Source: "_watchdog_runtime\node_modules\*"; DestDir: "{app}\watchdog\node_modules"; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;
 Source: "{{app}}\*"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;
-Source: "{{appData}}\options.ini"; DestDir: "{userappdata}\Achievement Watcher\cfg"; Flags: onlyifdoesntexist;
 Source: "{{appData}}\appList.json"; DestDir: "{userappdata}\Achievement Watcher\steam_cache\schema"; Flags: onlyifdoesntexist;
 Source: "redist\microsoft\*"; DestDir: "{tmp}\redist" ; Flags: ignoreversion overwritereadonly recursesubdirs createallsubdirs;
 Source: "redist\growl\*"; DestDir: "{tmp}\redist" ; Flags: ignoreversion overwritereadonly; 
