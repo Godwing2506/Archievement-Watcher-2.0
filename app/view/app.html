@@ -19,7 +19,9 @@
       <section id="home">
       
         <div id="user-info">
-          <div id="watchdog-indicator" class="watchdog-status" title="Watchdog desconectado"><i class="fas fa-plug"></i></div>
+          <button id="watchdog-indicator" class="watchdog-status" type="button" title="Watchdog desconectado" aria-label="Watchdog desconectado" aria-live="polite">
+            <i class="fas fa-plug" aria-hidden="true"></i>
+          </button>
           <user-avatar></user-avatar>
           <div class="info">
             <div class="name"></div>
@@ -55,13 +57,15 @@
            </div>
         </div>
 
-        <div id="game-list">
+        <div id="game-list" aria-busy="false">
           <ul>
           </ul>
           <div class="isEmpty"><span></span> <i class="fas fa-sad-tear"></i></div>
-          <div class="loading">
+          <div class="loading" role="status" aria-live="polite" aria-atomic="true">
             <div class="title"></div>
-            <div class="progressBar" data-percent="0"><span class="meter"></span></div>
+            <div class="progressBar" data-percent="0" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <span class="meter"></span>
+            </div>
           </div>
         </div>
 
@@ -201,6 +205,17 @@
                </li>
                <li>
                  <span id="watchdog_status"></span>
+               </li>
+               <li class="title" id="schema-cache-title"></li>
+               <li>
+                 <p id="schema-cache-description" class="disclaimer"></p>
+               </li>
+               <li>
+                 <span id="schema-cache-stats" role="status" aria-live="polite" aria-atomic="true"></span>
+               </li>
+               <li>
+                 <button id="btn-schema-cache-refresh" class="btn" type="button"><i class="fas fa-sync-alt" aria-hidden="true"></i> <span></span></button>
+                 <button id="btn-schema-cache-clean" class="btn" type="button"><i class="fas fa-trash-alt" aria-hidden="true"></i> <span></span></button>
                </li>
                <li>
                 <div id="watchdog_start_info" class="disclaimer"></div>

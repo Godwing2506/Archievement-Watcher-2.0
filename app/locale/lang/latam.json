@@ -14,6 +14,21 @@
   "scrollUp" : "Desplazarse hacia arriba",
   "allGamesBackButton" : "Todos los juegos",
   "removeFromList": "Quitar de la lista",
+  "scanCompleted": "Escaneo completado: {count} juegos encontrados.",
+  "scanFailed": "No se pudieron escanear los juegos.",
+  "noGamesFound": "No se encontraron juegos.",
+  "gameAdded": "Datos del juego guardados.",
+  "settingsSaved": "Configuración guardada.",
+  "closeNotification": "Cerrar notificación",
+  "avatarEditor": {
+    "change": "Cambiar imagen de perfil",
+    "title": "Ajustar imagen de perfil",
+    "instructions": "Primero se muestra la imagen completa. Arrástrala para ubicarla y usa el control para acercar o alejar.",
+    "preview": "Vista previa del avatar. Usa las flechas para reubicar la imagen.",
+    "zoom": "Zoom",
+    "cancel": "Cancelar",
+    "save": "Guardar imagen"
+  },
   "settings" : {
     "title": "Configuraciones",
     "sideMenu":{
@@ -34,6 +49,20 @@
       "save": "Guardar",
       "version": "Versión",
       "edit": "Edit"
+    },
+    "cache": {
+      "title": "Caché de esquemas de logros",
+      "description": "Esta caché contiene metadatos de logros descargables. La limpieza solo elimina archivos de esquemas; no afecta el seguimiento de notificaciones ni la configuración.",
+      "refresh": "Actualizar estadísticas de caché",
+      "clean": "Limpiar caché de esquemas",
+      "empty": "No hay archivos de esquemas en caché.",
+      "stats": "{count} archivo(s), {size} MB",
+      "confirmTitle": "¿Limpiar la caché de esquemas de logros?",
+      "confirmMessage": "¿Eliminar los esquemas vencidos y los archivos más antiguos si la caché supera el límite de tamaño?",
+      "confirmDetail": "Hay {count} archivo(s), {size} MB. Esto no elimina los datos de seguimiento de logros.",
+      "success": "Limpieza completada: {count} archivo(s) eliminados, {size} MB liberados.",
+      "partial": "La limpieza terminó con errores. {count} archivo(s) eliminados, {size} MB liberados.",
+      "error": "No se pudo leer o limpiar la caché de esquemas."
     },
     "general": {
       "language": {

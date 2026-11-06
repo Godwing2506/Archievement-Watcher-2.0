@@ -18,8 +18,9 @@
    * @param {number} duration - Duración en ms (0 = permanente)
    */
   window.showToast = function(message, type = 'info', duration = 4000) {
+    const toastType = ['success', 'info', 'warning', 'error'].includes(type) ? type : 'info';
     const toast = document.createElement('div');
-    toast.className = `toast-notification ${type}`;
+    toast.className = `toast-notification ${toastType}`;
 
     // Icono según el tipo
     const icons = {
@@ -29,13 +30,25 @@
       error: '✕'
     };
 
-    const icon = icons[type] || icons.info;
+    const icon = document.createElement('span');
+    icon.className = 'toast-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = icons[toastType];
 
-    toast.innerHTML = `
-      <div class="toast-icon">${icon}</div>
-      <div class="toast-message">${message}</div>
-      <div class="toast-close">×</div>
-    `;
+    const messageElement = document.createElement('span');
+    messageElement.className = 'toast-message';
+    messageElement.textContent = String(message);
+
+    const close = document.createElement('button');
+    close.className = 'toast-close';
+    close.type = 'button';
+    close.setAttribute('aria-label', window.uiText?.closeNotification || 'Close notification');
+    close.textContent = '×';
+
+    toast.setAttribute('role', toastType === 'error' ? 'alert' : 'status');
+    toast.setAttribute('aria-live', toastType === 'error' ? 'assertive' : 'polite');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.append(icon, messageElement, close);
 
     document.body.appendChild(toast);
 
@@ -51,7 +64,7 @@
     }
 
     // Manual close
-    toast.querySelector('.toast-close').addEventListener('click', () => {
+    close.addEventListener('click', () => {
       if (autoRemoveTimeout) clearTimeout(autoRemoveTimeout);
       removeToast(toast);
     });
@@ -171,11 +184,14 @@
     if (state === 'connected') {
       indicator.classList.add('connected');
       indicator.setAttribute('title', 'Watchdog conectado');
+      indicator.setAttribute('aria-label', 'Watchdog conectado');
     } else if (state === 'scanning') {
       indicator.classList.add('scanning', 'connected');
       indicator.setAttribute('title', 'Escaneando juegos...');
+      indicator.setAttribute('aria-label', 'Escaneando juegos');
     } else {
       indicator.setAttribute('title', 'Watchdog desconectado');
+      indicator.setAttribute('aria-label', 'Watchdog desconectado');
     }
   };
 

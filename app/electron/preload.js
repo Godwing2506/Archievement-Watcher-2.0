@@ -35,6 +35,8 @@ const api = {
     unmaximize: () => ipcRenderer.send('window:unmaximize'),
     close: () => ipcRenderer.send('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    isMinimizable: () => ipcRenderer.invoke('win-isMinimizable'),
+    isMaximizable: () => ipcRenderer.invoke('win-isMaximizable'),
     testNotification: () => ipcRenderer.send('window:test-notification')
   },
 

@@ -21,6 +21,13 @@ const debug = new (require("@xan105/log"))({
   file: path.join(remote.app.getPath('userData'),`logs/${remote.app.name}.log`)
 });
 
+function formatUiMessage(key, fallback, values = {}) {
+  const template = window.uiText && window.uiText[key] ? window.uiText[key] : fallback;
+  return String(template).replace(/\{(\w+)\}/g, (match, name) =>
+    Object.prototype.hasOwnProperty.call(values, name) ? values[name] : match
+  );
+}
+
 var app = {
   args: getArgs(remote.process.argv),
   config : settings.load(),
@@ -79,7 +86,8 @@ var app = {
      if (mainIndicator && mainIndicator.length) {
        mainIndicator.toggleClass("connected", !!isConnected)
                      .removeClass("loading-watchdog")
-                     .attr("title", isConnected ? "Watchdog conectado" : "Watchdog desconectado (Click para reintentar)");
+                     .attr("title", isConnected ? "Watchdog conectado" : "Watchdog desconectado (Click para reintentar)")
+                     .attr("aria-label", isConnected ? "Watchdog conectado" : "Watchdog desconectado. Haz clic para reintentar.");
      }
    };
 
@@ -278,7 +286,10 @@ var app = {
               key: (app.config.steam && app.config.steam.apiKey) ? app.config.steam.apiKey : '',
               autoTranslate: app.config.achievement.autoTranslate 
             });
-            app.onStart(); 
+            app.onStart();
+            if (typeof window.showToast === "function") {
+              window.showToast(formatUiMessage("gameAdded", "Game data saved."), "success");
+            }
           } catch (e) {
             remote.dialog.showErrorBox('Error', `No se pudo añadir el juego: ${e}`);
           }
@@ -304,7 +315,7 @@ var app = {
      $("#user-info .info .name").after('<input class="name-edit" type="text" style="display:none;width:250px;margin-left:8px;padding:4px;border-radius:4px;border:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.25);color:#fff;" />');
    }
    // allow user to click avatar or name to edit their display name
-   $(document).on('click', '#user-info .avatar, #user-info .info .name', function(){
+   $(document).on('click', '#user-info .info .name', function(){
      const nameSpan = $("#user-info .info .name");
      const input = $("#user-info .info .name-edit");
      input.val(nameSpan.text()).show().focus();
@@ -345,6 +356,11 @@ var app = {
       progress: $("#game-list .loading .progressBar"),
       meter: $("#game-list .loading .progressBar > .meter")
    };
+
+   $("#game-list").attr("aria-busy", "true");
+   $("#game-list .isEmpty").hide();
+   loadingElem.elem.show();
+   loadingElem.progress.attr("aria-valuenow", "0");
   
    $("#user-info .info .stats li:eq(0) span.data").text("0");
    $("#user-info .info .stats li:eq(1) span.data").text("0");
@@ -354,9 +370,10 @@ var app = {
    
    setTimeout(() => {
    achievements.makeList(self.config,(percent)=>{
-   
-      loadingElem.progress.attr("data-percent",percent);
-      loadingElem.meter.css("width",percent + "%");
+      const progress = Math.max(0, Math.min(100, Number(percent) || 0));
+      loadingElem.progress.attr("data-percent", progress)
+        .attr("aria-valuenow", progress);
+      loadingElem.meter.css("width",progress + "%");
      }).then((list) => {
 
       loadingElem.elem.hide();
@@ -364,6 +381,9 @@ var app = {
       if (list.length == 0) {
         debug.log("No game found !");
         $("#game-list .isEmpty").show();
+        if (typeof window.showToast === "function") {
+          window.showToast(formatUiMessage("noGamesFound", "No games found."), "info");
+        }
         return;
       }
 
@@ -395,7 +415,7 @@ var app = {
 
         let template = `
             <li>
-                <div class="game-box${isPlatinum ? ' platinum' : ''}" data-index="${game}" data-appid="${list[game].appid}" data-time="${(timeMostRecent > 0) ? timeMostRecent : 0}" ${(list[game].system) ? `data-system="${list[game].system}"` : ''}>
+                <div class="game-box${isPlatinum ? ' platinum' : ''}" role="button" tabindex="0" data-index="${game}" data-appid="${list[game].appid}" data-time="${(timeMostRecent > 0) ? timeMostRecent : 0}" ${(list[game].system) ? `data-system="${list[game].system}"` : ''}>
                   <div class="loading-overlay"><div class="content"><i class="fas fa-spinner fa-spin"></i></div></div>
                   ${(portrait && list[game].img.portrait) ? `<div class="header glow" style="background: url('${list[game].img.portrait}');">` : `<div class="header" style="background: url('${list[game].img.header}');">`}
                   </div>
@@ -412,6 +432,8 @@ var app = {
 
          elem.append(template);
          elem.find('li').last().find('.info .title').text(list[game].name || '');
+         elem.find('li').last().find('.game-box')
+           .attr('aria-label', list[game].name || String(list[game].appid));
 
          }
 
@@ -595,15 +617,25 @@ var app = {
       if (self.args.appid) $(`#game-list .game-box[data-appid="${self.args.appid.toString().replace(/[^\d]/g, '')}"]`).first().trigger("click");
 
       sort(elem,sortOptions());
+      loadingElem.progress.attr("data-percent", 100).attr("aria-valuenow", 100);
+      if (typeof window.showToast === "function") {
+        window.showToast(formatUiMessage("scanCompleted", "Scan complete: {count} games found.", {
+          count: list.length
+        }), "success");
+      }
      }).catch((err) => {
       loadingElem.elem.hide();
       $("#game-list .isEmpty").show();
       debug.error("Game list generation failure: " + (err && (err.message || err)));
+      if (typeof window.showToast === "function") {
+        window.showToast(formatUiMessage("scanFailed", "Unable to scan games."), "error");
+      }
       window.api.showMessageBox({type: "error", title: "Unexpected Error", message: "Game list generation failure", detail: `${err}`});
      }).finally(() => {
+      $("#game-list").attr("aria-busy", "false");
       $("#user-info").fadeTo('fast', 1).css("pointer-events","initial");
       if (typeof window.updateWatchdogStatus === 'function') {
-        window.updateWatchdogStatus().catch(() => {});
+        window.updateWatchdogStatus().catch((err) => debug.warn("Watchdog status refresh failed:", err));
       }
       $("#sort-box").fadeTo('fast', 1).css("pointer-events","initial");
       $("#search-bar").fadeTo('fast', 1).css("pointer-events","initial");
@@ -765,7 +797,8 @@ var app = {
   setWatchdogStatus: function(connected) {
     const el = $("#watchdog-indicator");
     if (el.length) {
-      el.toggleClass("connected", !!connected).attr("title", connected ? "Watchdog conectado" : "Watchdog desconectado");
+      const label = connected ? "Watchdog conectado" : "Watchdog desconectado";
+      el.toggleClass("connected", !!connected).attr("title", label).attr("aria-label", label);
       debug.log(`Watchdog status UI updated: ${connected ? 'CONNECTED' : 'DISCONNECTED'}`);
     } else {
       debug.log('Watchdog status UI element NOT FOUND');

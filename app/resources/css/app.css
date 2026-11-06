@@ -31,7 +31,13 @@
 
 
 html, body, ul, ol, li, p { margin: 0; padding: 0; }
-*:focus{ outline: none; }
+*:focus-visible {
+  outline: 2px solid #66c0f4;
+  outline-offset: 3px;
+}
+*:focus:not(:focus-visible) {
+  outline: none;
+}
 img { -webkit-user-drag: none; user-drag: none; }
 li { list-style: none; }
 
@@ -78,13 +84,17 @@ main {
 }
 
 #watchdog-indicator {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  position: relative;
+  flex: 0 0 auto;
+  margin-right: 10px;
   font-size: 14px;
   color: #5c6b7a;
   transition: color 0.3s ease;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
 }
 #watchdog-indicator.connected {
   color: #5cb85c;
@@ -94,27 +104,8 @@ main {
   display: block;
 }
 
-#user-info .avatar {
-  background: url(../img/avatar.png);
-  background-color: #1a2332;
-  background-repeat: no-repeat !important;
-  background-size: cover !important;
-  background-position: center !important;
-  width: 96px;
-  height: 96px; 
-  border-radius: 50%;
-  border: 2px solid rgba(102, 192, 244, 0.5);
-  margin: 10px;
-  box-shadow: 0 0 24px rgba(102, 192, 244, 0.15), inset 0 1px 0 rgba(255,255,255,0.08);
-  transition: border-color 0.2s ease, box-shadow 0.25s ease, transform 0.2s ease;
-}
-
-#user-info .avatar:hover {
-  cursor: pointer;
-  border-color: #66c0f4;
-  box-shadow: 0 0 28px rgba(102, 192, 244, 0.4), 0 0 60px rgba(102, 192, 244, 0.1);
-  transform: scale(1.02);
-  color: #d9dfe4;
+#user-info user-avatar {
+  flex: 0 0 auto;
 }
 
 #user-info .info {
@@ -296,6 +287,10 @@ main {
 }
 #game-list .game-box:hover .header {
   opacity: 0.92;
+}
+
+#game-list .game-box:focus-visible {
+  outline-offset: 4px;
 }
 
 @keyframes shine {
@@ -1670,6 +1665,18 @@ main {
 #settings .content[data-view="advanced"] .btn,
 #settings .content[data-view="debug"] .btn  {
   margin: 4px 2px;
+}
+
+#settings .content[data-view="debug"] button.btn {
+  color: inherit;
+  font: inherit;
+  border-radius: 4px;
+}
+
+#settings .content[data-view="debug"] button.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
 }
 
 #settings .content[data-view="advanced"] a.btn,

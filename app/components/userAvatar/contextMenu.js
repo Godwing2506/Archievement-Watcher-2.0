@@ -4,7 +4,6 @@ const remote = require('@electron/remote');
 const { Menu, MenuItem, nativeImage } = remote;
 const request = require('request-zero');
 
-const { selectFileDialog } = require("./selectFileDialog.js");
 const { getSteamPath, getSteamUsers } = require("../../parser/steam.js");
 
 const path = require("path");
@@ -36,7 +35,7 @@ function contextMenu(e, position = null){
 	menu.append(new MenuItem({ 
 		icon: nativeImage.createFromPath(path.join(appPath,"resources/img/folder-open.png")),
 		label: 'Browse...',
-		click: function() { selectFileDialog.call(self) } 
+		click: function() { self.openFilePicker() }
 	  })
 	);
 		
@@ -45,6 +44,7 @@ function contextMenu(e, position = null){
 		label: 'Reset to default avatar',
 		click: function() { 
 			localStorage.removeItem("avatar");
+			localStorage.removeItem("avatarCrop");
 			self.update();
 		} 
 	  })
@@ -83,6 +83,7 @@ function contextMenu(e, position = null){
 					request(self.steamUsers[i].profile.avatarFull,{encoding: "base64"}).then((res)=>{
 						const base64 = `data:${res.headers["content-type"]};charset=utf-8;base64,${res.body}`
 						localStorage.setItem("avatar",base64);
+						localStorage.removeItem("avatarCrop");
 						self.update();
 					}).catch((err)=>{
 						remote.dialog.showMessageBoxSync({ type: "error", title: "Error", message: `Failed to fetch ${self.steamUsers[i].name}'s avatar.`, detail: `${err}` });

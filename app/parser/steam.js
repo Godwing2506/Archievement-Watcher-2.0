@@ -21,6 +21,7 @@ const htmlParser = require("node-html-parser");
 const translator = require(path.join(appPath,"util/translator.js"));
 const { normalizeGoldbergUserAchievements } = require(path.join(__dirname, "goldbergAchievements.js"));
 const { statsLocalToAchievements, hasClassicAchievementSections, buildAchievementStatLinks } = require(path.join(__dirname, "statsIniAchievements.js"));
+const { allSettledLimited } = require(path.join(appPath, "util/concurrency.js"));
 
 function withTimeout(promise, ms, label) {
   let timer;
@@ -33,6 +34,7 @@ function withTimeout(promise, ms, label) {
 const cacheRoot = remote.app.getPath('userData');
 
 const SCHEMA_LANG_FALLBACK = ["latam", "spanish", "english"];
+const SCAN_CONCURRENCY = 8;
 
 function loadFallbackStatLinks(appId) {
   try {
@@ -124,6 +126,7 @@ module.exports.scan = async (additionalSearch = []) => {
     const namedSearch = search.map((dir) => { return normalize(dir) + "/*" });
     
     let data = [];
+    const seenGoldberg = new Set();
     const goldbergRoots = [
       path.join(process.env['APPDATA'] || '', 'Goldberg SteamEmu Saves'),
       path.join(process.env['Public'] || '', 'Documents/Steam/Goldberg SteamEmu Saves')
@@ -137,8 +140,9 @@ module.exports.scan = async (additionalSearch = []) => {
           const appid = path.parse(dir).name;
           if (!isLikelySteamAppIdFolder(appid)) continue;
           const scanPath = await resolveGoldbergScanPath(dir);
-          if (!data.some(g => g.appid === appid && g.source === "Goldberg")) {
+          if (!seenGoldberg.has(appid)) {
             data.push({ appid, source: "Goldberg", data: { type: "file", path: scanPath } });
+            seenGoldberg.add(appid);
           }
         }
         // Goldberg saves user achievements at .../<appid>/ (not only under remote/)
@@ -146,12 +150,13 @@ module.exports.scan = async (additionalSearch = []) => {
         for (const dir of goldbergAppDirs) {
           const appid = path.parse(dir).name;
           if (!isLikelySteamAppIdFolder(appid)) continue;
-          if (data.some(g => g.appid === appid && g.source === "Goldberg")) continue;
+          if (seenGoldberg.has(appid)) continue;
           data.push({ appid, source: "Goldberg", data: { type: "file", path: dir } });
+          seenGoldberg.add(appid);
         }
       }
       if (Date.now() - tGold > 1000) debug.log(`[DIAG] steam.scan Goldberg block took ${Date.now()-tGold}ms`);
-    } catch (e) { /* ignore */ }
+    } catch (e) { debug.warn(`[DIAG] Goldberg scan failed: ${e.message || e}`); }
     
     // Scan numeric folders
     const tNum = Date.now();
@@ -172,6 +177,7 @@ module.exports.scan = async (additionalSearch = []) => {
       { pattern: "Fairlight", source: "Fairlight" },
       { pattern: "FLT", source: "FLT" }
     ];
+    const seenNumeric = new Set(data.map((game) => JSON.stringify([game.appid, game.source || ""])));
 
     for (let dir of numericDirs) {
       if (dir.includes("Goldberg")) continue;
@@ -201,8 +207,10 @@ module.exports.scan = async (additionalSearch = []) => {
       }
 
       // Skip duplicate entries (same appid already found)
-      if (!data.some(g => g.appid === appid && g.source === game.source)) {
+      const key = JSON.stringify([appid, game.source || ""]);
+      if (!seenNumeric.has(key)) {
         data.push(game);
+        seenNumeric.add(key);
       }
     }
 
@@ -213,9 +221,7 @@ module.exports.scan = async (additionalSearch = []) => {
     const emuIniFiles = ["steam_emu.ini", "SteamConfig.ini", "valve.ini", "tenoke.ini", "TENOKE.ini", "RUNE.ini", "rune.ini", "flt.ini", "FLT.ini", "Achievements.ini"];
     const namedDirs = await glob(namedSearch, { onlyDirectories: true, absolute: true, suppressErrors: true });
 
-    const namedScanPromises = namedDirs
-      .filter(dir => !path.parse(dir).name.match(/^[0-9]+$/)) // skip numeric folders already scanned
-      .map(async (dir) => {
+    const scanNamedDirectory = async (dir) => {
         for (const iniFile of emuIniFiles) {
           const fullIni = path.join(dir, iniFile);
           try {
@@ -249,12 +255,25 @@ module.exports.scan = async (additionalSearch = []) => {
           } catch (e) { /* continue to next file */ }
         }
         return null;
-      });
-
-    const namedResults = await Promise.all(namedScanPromises);
-    for (const result of namedResults) {
-      if (result && !data.some(g => g.appid === result.appid && g.data.path === result.data.path)) {
+      };
+    const namedDirsToScan = namedDirs.filter((dir) => !/^[0-9]+$/.test(path.parse(dir).name));
+    const namedScanResults = await allSettledLimited(
+      namedDirsToScan,
+      SCAN_CONCURRENCY,
+      scanNamedDirectory
+    );
+    const seenNamed = new Set(data.map((game) => JSON.stringify([game.appid, game.data.path])));
+    for (const scanResult of namedScanResults) {
+      if (scanResult.status === "rejected") {
+        debug.warn(`[DIAG] Named directory scan failed: ${scanResult.reason.message || scanResult.reason}`);
+        continue;
+      }
+      const result = scanResult.value;
+      if (result) {
+        const key = JSON.stringify([result.appid, result.data.path]);
+        if (seenNamed.has(key)) continue;
         data.push(result);
+        seenNamed.add(key);
       }
     }
 

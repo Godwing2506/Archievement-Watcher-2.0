@@ -200,6 +200,116 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
      
      window.updateWatchdogStatus = updateWatchdogStatus;
 
+     const cacheL10n = () => window.__cacheL10n || {};
+     const cacheText = (key, values = {}) => {
+       const template = cacheL10n()[key] || key;
+       return String(template).replace(/\{(\w+)\}/g, (match, name) =>
+         Object.prototype.hasOwnProperty.call(values, name) ? values[name] : match
+       );
+     };
+     async function loadSchemaCacheStats() {
+       const cacheManager = require(require("path").join(window.appPath, "parser/cacheManager.js"));
+       const userDataPath = await window.api.getPath("userData");
+       const stats = await cacheManager.getSchemaCacheStats(userDataPath);
+       if (stats.error) throw new Error(stats.error);
+
+       const status = $("#schema-cache-stats");
+       const cleanButton = $("#btn-schema-cache-clean");
+       if (!stats.exists) {
+         status.text(cacheText("empty"));
+         cleanButton.prop("disabled", true);
+         return { ...stats, fileCount: 0, totalSizeMB: "0.00" };
+       }
+
+       status.text(cacheText("stats", {
+         count: stats.fileCount,
+         size: stats.totalSizeMB
+       }));
+       cleanButton.prop("disabled", stats.fileCount === 0);
+       return stats;
+     }
+     async function reportSchemaCacheError(error) {
+       console.error("[Cache] Schema cache operation failed:", error);
+       $("#schema-cache-stats").text(cacheText("error"));
+       try {
+         await window.api.showMessageBox({
+           type: "error",
+           title: cacheText("error"),
+           message: cacheText("error"),
+           detail: error.message || String(error)
+         });
+       } catch (dialogError) {
+         console.error("[Cache] Could not display cache error dialog:", dialogError);
+       }
+     }
+     $("#btn-schema-cache-refresh").on("click", async function() {
+       const button = $(this);
+       button.prop("disabled", true);
+       try {
+         await loadSchemaCacheStats();
+       } catch (error) {
+         await reportSchemaCacheError(error);
+       } finally {
+         button.prop("disabled", false);
+       }
+     });
+     $("#btn-schema-cache-clean").on("click", async function() {
+       const button = $(this);
+       button.prop("disabled", true);
+       try {
+         const cacheManager = require(require("path").join(window.appPath, "parser/cacheManager.js"));
+         const userDataPath = await window.api.getPath("userData");
+         const stats = await cacheManager.getSchemaCacheStats(userDataPath);
+         if (stats.error) throw new Error(stats.error);
+         if (!stats.exists || stats.fileCount === 0) {
+           $("#schema-cache-stats").text(cacheText("empty"));
+           return;
+         }
+
+         const confirmation = await window.api.showMessageBox({
+           type: "warning",
+           title: cacheText("confirmTitle"),
+           message: cacheText("confirmMessage"),
+           detail: cacheText("confirmDetail", {
+             count: stats.fileCount,
+             size: stats.totalSizeMB
+           }),
+           buttons: [cacheText("cancel"), cacheText("clean")],
+           defaultId: 0,
+           cancelId: 0
+         });
+         if (confirmation.response !== 1) return;
+
+         const result = await cacheManager.performSchemaCleanup(userDataPath);
+         if (result.error) throw new Error(result.error);
+         $("#schema-cache-stats").text(cacheText(result.success ? "success" : "partial", {
+           count: result.deletedCount,
+           size: result.freedMB
+         }));
+         if (!result.success) {
+           const firstError = result.errors[0];
+           const detail = firstError ? `${firstError.path}: ${firstError.message}` : cacheText("error");
+           await window.api.showMessageBox({
+             type: "error",
+             title: cacheText("error"),
+             message: cacheText("partial", { count: result.deletedCount, size: result.freedMB }),
+             detail
+           });
+         }
+         await loadSchemaCacheStats();
+         if (result.deletedCount > 0 && typeof window.showToast === "function") {
+           window.showToast(cacheText(result.success ? "success" : "partial", {
+             count: result.deletedCount,
+             size: result.freedMB
+           }), result.success ? "success" : "warning");
+         }
+       } catch (error) {
+         await reportSchemaCacheError(error);
+       } finally {
+         button.prop("disabled", false);
+       }
+     });
+
      $("#steamwebapikey").off("input.steamKey blur.steamKey").on("input.steamKey", function() {
        steamKeyDirty = true;
        clearTimeout(steamKeySaveTimeout);
@@ -513,7 +623,10 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
         settingsModule().save(app.config).then(()=>{
         
           syncSteamKeyUi();
-          $("#settings .box").fadeOut(()=>{
+            if (typeof window.showToast === "function") {
+              window.showToast(window.uiText?.settingsSaved || "Settings saved.", "success");
+            }
+            $("#settings .box").fadeOut(()=>{
                 self.css("pointer-events","initial");
                 resetUI();
             });
@@ -587,6 +700,13 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
             const version = await window.api.getVersion();
             $("#about-version").text(`Versión ${version || "?"}`);
           } catch (e) { $("#about-version").text(""); }
+        }
+        if (view === "debug") {
+          try {
+            await loadSchemaCacheStats();
+          } catch (error) {
+            await reportSchemaCacheError(error);
+          }
         }
         
         self.css("pointer-events","initial");

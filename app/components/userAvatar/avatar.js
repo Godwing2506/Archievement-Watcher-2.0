@@ -6,9 +6,10 @@ const regedit = require('../../util/reg_shim');
 const accountms = require('accountpicture-ms-extractor');
 
 async function imageFileToBase64(filePath){
-	const ext = path.parse(filePath).ext.replace(".","");
+	const ext = path.parse(filePath).ext.slice(1).toLowerCase();
 	const buffer = await fs.promises.readFile(filePath);
-	const base64 = `data:image/${ext};charset=utf-8;base64,${buffer.toString('base64')}`;
+	const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+	const base64 = `data:${mimeType};charset=utf-8;base64,${buffer.toString('base64')}`;
 	return base64;
 }
 

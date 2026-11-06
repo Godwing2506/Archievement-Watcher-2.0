@@ -6,77 +6,9 @@
 
 (function() {
   'use strict';
+  let keyboardActivationBound = false;
 
   console.log('🎨 Integrando mejoras UI con Achievement Watcher...');
-
-  // ============================================
-  // INTEGRACIÓN CON EL ESCANEO DE JUEGOS
-  // ============================================
-
-  // Hook al inicio del escaneo
-  const originalParse = window.parse;
-  if (originalParse) {
-    window.parse = async function(...args) {
-      // Actualizar watchdog a estado "scanning"
-      updateWatchdogState('scanning');
-
-      try {
-        const result = await originalParse.apply(this, args);
-
-        // Al completar el escaneo
-        updateWatchdogState('connected');
-
-        // Mostrar notificación de éxito
-        const gameCount = result?.length || 0;
-        if (gameCount > 0) {
-          showToast(
-            `Escaneo completado: ${gameCount} ${gameCount === 1 ? 'juego encontrado' : 'juegos encontrados'}`,
-            'success'
-          );
-        }
-
-        return result;
-      } catch (error) {
-        updateWatchdogState('disconnected');
-        showToast('Error al escanear juegos', 'error');
-        throw error;
-      }
-    };
-  }
-
-  // ============================================
-  // MEJORAR TRANSICIONES ENTRE SECCIONES
-  // ============================================
-
-  // Interceptar navegación a logros
-  const originalShowAchievements = window.goToAchievements;
-  if (originalShowAchievements) {
-    window.goToAchievements = function(...args) {
-      const homeSection = document.getElementById('home');
-      const achievementSection = document.getElementById('achievement');
-
-      if (homeSection && achievementSection) {
-        transitionToSection(homeSection, achievementSection);
-      }
-
-      return originalShowAchievements.apply(this, args);
-    };
-  }
-
-  // Interceptar navegación a home
-  const originalShowHome = window.goToHome;
-  if (originalShowHome) {
-    window.goToHome = function(...args) {
-      const homeSection = document.getElementById('home');
-      const achievementSection = document.getElementById('achievement');
-
-      if (homeSection && achievementSection) {
-        transitionToSection(achievementSection, homeSection);
-      }
-
-      return originalShowHome.apply(this, args);
-    };
-  }
 
   // ============================================
   // MEJORAR TOOLTIPS EN ELEMENTOS CLAVE
@@ -178,42 +110,39 @@
     // initRippleEffects(); // Descomentar si quieres el efecto ripple
   }
 
-  // ============================================
-  // NOTIFICACIONES PARA EVENTOS IMPORTANTES
-  // ============================================
+  function enableKeyboardActivation() {
+    const selector = [
+      '#sort-box .sort',
+      '#settingNav li',
+      '#btn-add-manual',
+      '#settings .btn:not(a)',
+      '#btn-previous',
+      '#btn-refresh-ach',
+      '#btn-master-unlock',
+      '#btn-reset-track',
+      '#btn-scrollup'
+    ].join(', ');
 
-  function setupEventNotifications() {
-    // Notificar cuando se agrega un juego manualmente
-    const addManualBtn = document.getElementById('btn-add-manual');
-    if (addManualBtn) {
-      const originalClick = addManualBtn.onclick;
-      addManualBtn.addEventListener('click', function() {
-        // Mostrar toast después de agregar
-        setTimeout(() => {
-          showToast('Juego agregado correctamente', 'success', 3000);
-        }, 500);
-      });
-    }
+    document.querySelectorAll(selector).forEach((element) => {
+      element.setAttribute('role', 'button');
+      element.setAttribute('tabindex', '0');
+      if (!element.hasAttribute('aria-label')) {
+        const label = element.getAttribute('title') ||
+          element.getAttribute('data-tooltip') ||
+          element.textContent.trim();
+        if (label) element.setAttribute('aria-label', label);
+      }
+    });
 
-    // Notificar cuando se guarda la configuración
-    const saveSettingsBtn = document.getElementById('btn-settings-save');
-    if (saveSettingsBtn) {
-      saveSettingsBtn.addEventListener('click', function() {
-        setTimeout(() => {
-          showToast('Configuración guardada', 'success', 2000);
-        }, 300);
-      });
-    }
-
-    // Notificar cuando se resetea el tracking
-    const resetTrackBtn = document.getElementById('btn-reset-track');
-    if (resetTrackBtn) {
-      resetTrackBtn.addEventListener('click', function() {
-        setTimeout(() => {
-          showToast('Registro de logros reiniciado', 'info', 2500);
-        }, 300);
-      });
-    }
+    if (keyboardActivationBound) return;
+    keyboardActivationBound = true;
+    document.addEventListener('keydown', (event) => {
+      const element = event.target.closest?.('[role="button"][tabindex="0"]');
+      if (!element || element.tagName === 'BUTTON' || element.hasAttribute('disabled')) return;
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      element.click();
+    });
   }
 
   // ============================================
@@ -236,20 +165,14 @@
   }
 
   // ============================================
-  // ESTADO INICIAL DEL WATCHDOG
+  // ESTADO DEL WATCHDOG
   // ============================================
 
   function initWatchdogState() {
     // Verificar el estado inicial del watchdog
     const indicator = document.getElementById('watchdog-indicator');
     if (indicator) {
-      // Comienza desconectado
-      updateWatchdogState('disconnected');
-
-      // Si hay un watchdog service activo, actualizar estado
-      if (window.watchdog && window.watchdog.isConnected) {
-        updateWatchdogState('connected');
-      }
+      indicator.setAttribute('aria-live', 'polite');
     }
   }
 
@@ -265,7 +188,7 @@
       enhanceTooltips();
       animateStats();
       enhanceButtons();
-      setupEventNotifications();
+      enableKeyboardActivation();
       enhanceSearchBar();
       initWatchdogState();
 

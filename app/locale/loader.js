@@ -56,6 +56,11 @@ function deepMerge(target, source) {
 }
 
 function translateUI(lang,locale,template,steamLanguages){     
+        const avatar = document.querySelector("user-avatar");
+        if (avatar && typeof avatar.setLabels === "function") {
+          avatar.setLabels(template.avatarEditor);
+        }
+
         let selector = $("#option_lang");
         selector.empty();
         for (let language of steamLanguages) {
@@ -247,6 +252,21 @@ function translateUI(lang,locale,template,steamLanguages){
           window.__backupL10n = template.settings.backup;
         }
         $("#settingNav li[data-view='debug'] span").text(clear(template.settings.sideMenu.debug));
+        const cacheText = template.settings.cache || {};
+        $("#schema-cache-title").text(clear(cacheText.title));
+        $("#schema-cache-description").text(clear(cacheText.description));
+        $("#btn-schema-cache-refresh span").text(clear(cacheText.refresh));
+        $("#btn-schema-cache-clean span").text(clear(cacheText.clean));
+        window.__cacheL10n = cacheText;
+        window.__cacheL10n.cancel = clear(template.settings.common.cancel) || "Cancel";
+        window.uiText = {
+          closeNotification: clear(template.closeNotification) || "Close notification",
+          scanCompleted: clear(template.scanCompleted) || "Scan complete: {count} games found.",
+          scanFailed: clear(template.scanFailed) || "Unable to scan games.",
+          noGamesFound: clear(template.noGamesFound) || "No games found.",
+          gameAdded: clear(template.gameAdded) || "Game data saved.",
+          settingsSaved: clear(template.settingsSaved) || "Settings saved."
+        };
         $("#btn-settings-cancel").text(clear(template.settings.common.cancel));
         $("#btn-settings-save").text(clear(template.settings.common.save));  
 }

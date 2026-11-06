@@ -15,6 +15,21 @@
   "allGamesBackButton" : "All Games",
   "removeFromList": "Remove from list",
   "buildIconPrefetchCache": "Build icon notification cache",
+  "scanCompleted": "Scan complete: {count} games found.",
+  "scanFailed": "Unable to scan games.",
+  "noGamesFound": "No games found.",
+  "gameAdded": "Game data saved.",
+  "settingsSaved": "Settings saved.",
+  "closeNotification": "Close notification",
+  "avatarEditor": {
+    "change": "Change profile image",
+    "title": "Adjust profile image",
+    "instructions": "The full image is shown first. Drag to reposition and use the slider to zoom.",
+    "preview": "Avatar preview. Use arrow keys to reposition.",
+    "zoom": "Zoom",
+    "cancel": "Cancel",
+    "save": "Save image"
+  },
   "settings" : {
     "title": "Settings",
     "sideMenu":{
@@ -35,6 +50,20 @@
       "save": "Save",
       "version": "Version",
       "edit": "Edit"
+    },
+    "cache": {
+      "title": "Achievement schema cache",
+      "description": "This cache contains downloadable achievement metadata. Cleanup only removes schema cache files; notification tracking and settings are not affected.",
+      "refresh": "Refresh cache statistics",
+      "clean": "Clean schema cache",
+      "empty": "No schema cache files found.",
+      "stats": "{count} file(s), {size} MB",
+      "confirmTitle": "Clean achievement schema cache?",
+      "confirmMessage": "Remove expired schema files and older files if the cache exceeds its size limit?",
+      "confirmDetail": "{count} file(s), {size} MB currently stored. This does not remove achievement tracking data.",
+      "success": "Cache cleanup complete: {count} file(s) removed, {size} MB freed.",
+      "partial": "Cache cleanup finished with errors. {count} file(s) removed, {size} MB freed.",
+      "error": "Could not read or clean the schema cache."
     },
     "general": {
       "language": {

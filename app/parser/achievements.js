@@ -18,6 +18,7 @@ const debug = new (require("@xan105/log"))({
 });
 const { crc32 } = require('crc');
 const ffs = require("@xan105/fs");
+const { allSettledLimited } = require(path.join(appPath, "util/concurrency.js"));
 
 function withTimeout(promise, ms, label) {
   let timer;
@@ -161,21 +162,6 @@ const metaCache = {
 module.exports.clearCache = async () => { metaCache.data = {}; metaCache.dirty = true; await metaCache.save(); };
 
 const CONCURRENCY = 8;
-async function allSettledLimited(items, limit, worker, onDone = () => {}) {
-  const results = new Array(items.length);
-  let next = 0;
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      const [res] = await Promise.allSettled([worker(items[i], i)]);
-      results[i] = res;
-      onDone();
-    }
-  });
-  await Promise.all(runners);
-  return results;
-}
-
 function schemaKey(appid, option) {
   const type = (appid.data.type === "rpcs3") ? `rpcs3:${appid.data.path}` : (appid.data.type === "uplay" || appid.data.type === "lumaplay") ? `uplay:${appid.appid}` : `steam:${appid.appid}`;
   return `${type}|${option.achievement.lang}`;

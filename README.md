@@ -93,7 +93,7 @@ NB: Golang cgo requires a gcc compiler installed and set in PATH (recommended : 
 
 + Inno Setup 6 is expected at `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`. If not, set the path in `buildme.cmd` or use the INNO_PATH environment variable if supported.
 
-+ If NPM gives you some trouble, try to delete every `package-lock.json`.
++ If NPM gives you trouble, inspect the error and rerun `npm ci` in the affected package. Keep its `package-lock.json` unless you have a specific reason to regenerate it.
 
 Legal
 =====

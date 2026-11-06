@@ -1,7 +1,5 @@
 'use strict';
 
-const { ipcRenderer } = require('electron');
-
 const template = `
     
     <link rel="stylesheet" href="../resources/css/normalize.css" type="text/css"/>
@@ -83,18 +81,26 @@ export default class titleBar extends HTMLElement {
       this.minimizeBtn.addEventListener('click', this.minimize.bind(this));
       
       const defaults = [
-		ipcRenderer.invoke('win-isMinimizable'),
-		ipcRenderer.invoke('win-isMaximizable')
+		window.api.window.isMinimizable(),
+		window.api.window.isMaximizable()
       ];
 
       Promise.allSettled(defaults).then((promises)=> {
-		
-		const [ isMinimizable, isMaximizable ] = promises;
-      
-		if (isMinimizable.value === true) this.setAttribute('minimizable', '');
-		if (isMaximizable.value === true) this.setAttribute('maximizable', '');
-      
-		this.update();
+        const [isMinimizable, isMaximizable] = promises;
+
+        if (isMinimizable.status === 'fulfilled' && isMinimizable.value === true) {
+          this.setAttribute('minimizable', '');
+        } else if (isMinimizable.status === 'rejected') {
+          console.error('Unable to determine whether the window is minimizable.', isMinimizable.reason);
+        }
+
+        if (isMaximizable.status === 'fulfilled' && isMaximizable.value === true) {
+          this.setAttribute('maximizable', '');
+        } else if (isMaximizable.status === 'rejected') {
+          console.error('Unable to determine whether the window is maximizable.', isMaximizable.reason);
+        }
+
+        this.update();
       });
     }
     
@@ -175,12 +181,12 @@ export default class titleBar extends HTMLElement {
     /* Custom method */
     close() {
       //this.dispatchEvent(new CustomEvent('close'));
-      ipcRenderer.invoke('win-close');
+      window.api.window.close();
     }
     
     maximize() {
       //this.dispatchEvent(new CustomEvent('maximize'));
-      ipcRenderer.invoke('win-maximize');
+      window.api.window.maximize();
     }
 
     settings() {
@@ -189,7 +195,7 @@ export default class titleBar extends HTMLElement {
     
     minimize() {
       //this.dispatchEvent(new CustomEvent('minimize'));
-      ipcRenderer.invoke('win-minimize');
+      window.api.window.minimize();
     }
     
 }
