@@ -50,6 +50,18 @@ There is a lot of things to check so make sure to have a look at the [wiki](http
 
 📸 If you have enabled the *souvenir* option(s) then a screenshot and/or video will be taken when you unlock an achievement.<br />
 
+Adding a Steam AppID manually
+=============================
+
+Use **Add AppID** above the game list to add a Steam game that the automatic scanners did not find. The AppID is saved in `cfg/manual-appids.json` and included in backups. A manually added game shows its achievement list; unlocked progress still depends on an available local or Steam achievement source.
+
+Automatic backups
+=================
+
+In **Settings > Backup**, select a folder that is already synchronized by OneDrive, Dropbox, Google Drive, or another cloud provider, then enable automatic backups. Achievement Watcher creates an initial backup immediately and creates another after its managed settings and local achievement data change. It keeps the 10 most recent automatic backup files in that folder; the provider's own app is responsible for syncing them.
+
+Automatic backups include the app's settings, local Steam/Uplay caches, and tracked playtime. They do not include original achievement files in game or emulator folders, external screenshots/videos, or logs. Restore a backup manually from **Settings > Backup**. Backup ZIP files are not encrypted as a whole, so protect access to the selected cloud account. The displayed success status confirms that a backup was saved locally, not that the provider has uploaded it.
+
 📖 Wiki and troubleshoot
 ========================
 

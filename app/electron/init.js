@@ -68,6 +68,8 @@ try {
   let MainWin = null;
   let tray = null;
   let forceQuit = false;
+  let autoBackupManager = null;
+  let autoBackupStart = Promise.resolve();
   
   app.on('ready', async function(){
     try {
@@ -77,6 +79,24 @@ try {
       fs.mkdirSync(path.join(userData, "logs"), { recursive: true });
       fs.mkdirSync(path.join(userData, "cfg"), { recursive: true });
     } catch (e) {}
+
+    const backupModule = require(path.join(__dirname, "..", "util", "backup.js"));
+    const { createAutoBackupManager } = require(path.join(__dirname, "..", "util", "autoBackup.js"));
+    autoBackupManager = createAutoBackupManager({
+      userDataPath: userData,
+      backup: backupModule
+    });
+    autoBackupManager.onStatus((status) => {
+      if (MainWin && !MainWin.isDestroyed()) {
+        MainWin.webContents.send('backup:auto:status', status);
+      }
+    });
+    autoBackupStart = autoBackupManager.start();
+    app.on('before-quit', () => {
+      if (autoBackupManager) {
+        autoBackupManager.stop().catch((error) => console.error('[AutoBackup] Shutdown failed:', error));
+      }
+    });
 
     const configWindow = manifest.config && manifest.config.window;
     if (!configWindow) throw new Error('package.json config.window is missing');
@@ -220,6 +240,27 @@ try {
     ipcMain.handle('app:getWinDir', () => process.env['WINDIR']);
     ipcMain.handle('app:getEnv', (event, name) => process.env[name]);
     ipcMain.handle('app:isDev', () => manifest.config.debug || false);
+
+    ipcMain.handle('backup:auto:getStatus', async () => {
+      await autoBackupStart;
+      return autoBackupManager.getStatus();
+    });
+    ipcMain.handle('backup:auto:configure', async (event, configuration) => {
+      await autoBackupStart;
+      return autoBackupManager.configure(configuration);
+    });
+    ipcMain.handle('backup:auto:create', async () => {
+      await autoBackupStart;
+      return autoBackupManager.createBackup();
+    });
+    ipcMain.handle('backup:auto:suspend', async () => {
+      await autoBackupStart;
+      return autoBackupManager.suspend();
+    });
+    ipcMain.handle('backup:auto:resume', async () => {
+      await autoBackupStart;
+      return autoBackupManager.resume();
+    });
 
     // Utilidades de ruta
     ipcMain.handle('path:join', (event, ...args) => path.join(...args));

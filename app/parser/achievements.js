@@ -7,6 +7,7 @@ const uplay = require(path.join(appPath,"parser/uplay.js"));
 const rpcs3 = require(path.join(appPath,"parser/rpcs3.js"));
 const greenluma = require(path.join(appPath,"parser/greenluma.js"));
 const userDir = require(path.join(appPath,"parser/userDir.js"));
+const manualGames = require(path.join(appPath,"parser/manualGames.js"));
 const blacklist = require(path.join(appPath,"parser/blacklist.js"));
 const watchdog = require(path.join(appPath,"parser/watchdog.js"));
 const emulators = require(path.join(appPath,"parser/emulators.js"));
@@ -114,6 +115,14 @@ async function discover(source, callbackProgress = () => {}) {
     for (let result of scanResults) {
       data = data.concat(result);
     }
+
+    const manualAppIds = await manualGames.load(path.join(remote.app.getPath('userData'), "cfg", "manual-appids.json"));
+    const manualEntries = manualGames.toDiscoveredEntries(manualAppIds, data);
+    await Promise.all(manualEntries.map(async (entry) => {
+      const location = await emulators.findByAppId(entry.appid);
+      if (location) entry.data = { ...entry.data, ...location };
+    }));
+    data = data.concat(manualEntries);
     
     //AppID Blacklisting
     try{  
@@ -160,6 +169,10 @@ const metaCache = {
   }
 };
 module.exports.clearCache = async () => { metaCache.data = {}; metaCache.dirty = true; await metaCache.save(); };
+module.exports.addManualGame = (appId) => manualGames.add(
+  path.join(remote.app.getPath('userData'), "cfg", "manual-appids.json"),
+  appId
+);
 
 const CONCURRENCY = 8;
 function schemaKey(appid, option) {
@@ -195,6 +208,9 @@ async function loadSchema(appid, option, schemaPromises) {
 
 async function readLocalRoot(appid, game, option) {
   const t = appid.data.type;
+  if (t === "manual") {
+    return appid.data.path ? await steam.getAchievementsFromFile(appid.data.path) : {};
+  }
   if (t === "file" && appid.data.file && ["gbe_fork","goldberg","onlinefix"].includes(appid.data.emulator)) {
     return emuToRoot(appid.data.file);
   }
@@ -304,7 +320,9 @@ module.exports.makeList = async(option, callbackProgress = ()=>{}) => {
             if (appid.data && appid.data.type === "steamAPI" && appid.data.userID && appid.data.userID.id) {
               steamPollList.push({ appid: String(appid.appid), steamId64: String(appid.data.userID.id) });
             }
-            if (!option.achievement.mergeDuplicate && appid.source) game.source = appid.source;
+            if ((appid.data.type === "manual" || !option.achievement.mergeDuplicate) && appid.source) {
+              game.source = appid.source;
+            }
             if (game.achievement.total === 0) debug.log(`[DIAG] [${appid.appid}] Schema has 0 achievements (no API key or store fallback?)`);
 
             const index = buildIndex(game.achievement.list);
@@ -409,7 +427,7 @@ module.exports.refreshAchievements = async (game, option) => {
     if (!gotRoot && game.data.type === "rpcs3" && game.data.path) {
       try { root = await rpcs3.getAchievements(game.data.path, game.achievement.total); gotRoot = !!root; } catch (e) { debug.warn(e); }
     }
-    if (!gotRoot && game.data.type === "file" && game.data.path) {
+    if (!gotRoot && ["file", "manual"].includes(game.data.type) && game.data.path) {
       // First try the normal path
       try {
         root = await steam.getAchievementsFromFile(game.data.path);

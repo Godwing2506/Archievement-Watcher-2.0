@@ -46,6 +46,19 @@ const api = {
     onChange: (cb) => ipcRenderer.on('achievements-changed', (event, msg) => cb(msg))
   },
 
+  autoBackup: {
+    getStatus: () => ipcRenderer.invoke('backup:auto:getStatus'),
+    configure: (configuration) => ipcRenderer.invoke('backup:auto:configure', configuration),
+    create: () => ipcRenderer.invoke('backup:auto:create'),
+    suspend: () => ipcRenderer.invoke('backup:auto:suspend'),
+    resume: () => ipcRenderer.invoke('backup:auto:resume'),
+    onStatus: (cb) => {
+      const listener = (event, status) => cb(status);
+      ipcRenderer.on('backup:auto:status', listener);
+      return () => ipcRenderer.removeListener('backup:auto:status', listener);
+    }
+  },
+
   // Gestión del Watchdog (Lógica movida al Main)
   watchdog: {
     start: () => ipcRenderer.invoke('watchdog:start'),

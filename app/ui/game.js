@@ -74,19 +74,19 @@ function getSteamGlobalStat(appid) {
     function syncMasterButtons() {
       const enabled = typeof app.isMasterModeEnabled === "function" && app.isMasterModeEnabled();
       const game = $("#achievement .header").data("currentGame");
-      const canUse = enabled && game && game.data && game.data.type === "file"
+      const canUse = enabled && masterUnlock.canUnlock(game)
         && game.system !== "playstation" && game.system !== "uplay";
       $("#btn-master-unlock").toggle(!!canUse);
     }
 
     const path = require("path");
     const appRoot = typeof appPath !== "undefined" ? appPath : window.appPath;
+    const masterUnlock = require(path.join(appRoot, "parser", "masterUnlock.js"));
 
     $("#btn-master-unlock").click(async function() {
       if (!app.isMasterModeEnabled || !app.isMasterModeEnabled()) return;
       const game = $("#achievement .header").data("currentGame");
       if (!game) return;
-      const masterUnlock = require(path.join(appRoot, "parser", "masterUnlock.js"));
       const locked = masterUnlock.getLockedNames(game);
       if (locked.length === 0) {
         remote.dialog.showMessageBoxSync({ type: "info", title: "Modo Master", message: "Ya tienes todos los logros desbloqueados." });

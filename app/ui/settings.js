@@ -872,8 +872,127 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
         if (code === 'ERR_BACKUP_VERSION') return backupL10n('errorVersion', 'Unsupported backup version.');
         if (code === 'ERR_BACKUP_NOT_FOUND') return backupL10n('errorNotFound', 'Backup file was not found.');
         if (code === 'ERR_BACKUP_WRITE_FAILED') return backupL10n('errorWrite', 'Could not write backup. Check free space and permissions.');
+        if (code === 'ERR_BACKUP_DESTINATION_REQUIRED') return backupL10n('errorDestinationRequired', 'Choose a backup folder first.');
+        if (code === 'ERR_BACKUP_DESTINATION_INVALID') return backupL10n('errorDestinationInvalid', 'The backup folder is unavailable or overlaps app data.');
+        if (code === 'ERR_BACKUP_WATCH_FAILED') return backupL10n('errorWatch', 'Automatic backups could not monitor app data changes.');
+        if (code === 'ERR_BACKUP_SETTINGS_INVALID') return backupL10n('errorSettings', 'Automatic backup settings are invalid. Choose the folder again.');
         return backupL10n('errorGeneric', 'Backup operation failed.') + (code ? `\n${code}` : '');
       }
+
+      let autoBackupStatus = {
+        enabled: false,
+        directoryPath: '',
+        lastBackupAt: null,
+        lastError: null,
+        isBackingUp: false
+      };
+
+      function autoBackupL10n(key, fallback) {
+        const automatic = window.__autoBackupL10n;
+        return (automatic && automatic[key]) || fallback;
+      }
+
+      function renderAutoBackupStatus(status) {
+        if (status) autoBackupStatus = status;
+        const automatic = autoBackupStatus;
+        $("#auto-backup-directory").text(
+          automatic.directoryPath || autoBackupL10n("statusNotConfigured", "Choose a folder to set up automatic backups.")
+        );
+        $("#btn-auto-backup-toggle span").text(automatic.enabled
+          ? autoBackupL10n("disable", "Disable automatic backups")
+          : autoBackupL10n("enable", "Enable automatic backups"));
+
+        let message;
+        if (automatic.isBackingUp) {
+          message = autoBackupL10n("statusRunning", "Creating a backup...");
+        } else if (automatic.lastError) {
+          message = autoBackupL10n("statusError", "Backup error: {error}")
+            .replace("{error}", backupErrorMessage({ message: automatic.lastError }));
+        } else if (!automatic.enabled) {
+          message = autoBackupL10n("statusDisabled", "Automatic backups are disabled.");
+        } else if (automatic.lastBackupAt) {
+          message = autoBackupL10n("statusReady", "Last backup: {date}")
+            .replace("{date}", new Date(automatic.lastBackupAt).toLocaleString());
+        } else {
+          message = autoBackupL10n("statusNotConfigured", "Choose a folder to set up automatic backups.");
+        }
+        $("#auto-backup-status").text(message);
+        $("#btn-auto-backup-now").css(
+          "pointer-events",
+          automatic.directoryPath && !automatic.isBackingUp ? "initial" : "none"
+        );
+      }
+
+      window.refreshAutoBackupStatus = renderAutoBackupStatus;
+      window.api.autoBackup.onStatus(renderAutoBackupStatus);
+      window.api.autoBackup.getStatus()
+        .then(renderAutoBackupStatus)
+        .catch((error) => {
+          renderAutoBackupStatus({ ...autoBackupStatus, lastError: error.message || String(error) });
+        });
+
+      async function chooseAutoBackupFolder() {
+        const dialog = await window.api.showOpenDialog({
+          title: autoBackupL10n("chooseFolderTitle", "Choose a cloud-synced backup folder"),
+          properties: ["openDirectory", "createDirectory"]
+        });
+        if (dialog.canceled || !dialog.filePaths || !dialog.filePaths[0]) return;
+        const status = await window.api.autoBackup.configure({
+          directoryPath: dialog.filePaths[0],
+          enabled: true
+        });
+        renderAutoBackupStatus(status);
+      }
+
+      $("#btn-auto-backup-folder").click(async function () {
+        try {
+          await chooseAutoBackupFolder();
+        } catch (error) {
+          await window.api.showMessageBox({
+            type: "error",
+            title: autoBackupL10n("errorTitle", "Automatic backup error"),
+            message: backupErrorMessage(error)
+          });
+        }
+      });
+
+      $("#btn-auto-backup-toggle").click(async function () {
+        try {
+          if (autoBackupStatus.enabled) {
+            const status = await window.api.autoBackup.configure({
+              directoryPath: autoBackupStatus.directoryPath,
+              enabled: false
+            });
+            renderAutoBackupStatus(status);
+          } else if (!autoBackupStatus.directoryPath) {
+            await chooseAutoBackupFolder();
+          } else {
+            const status = await window.api.autoBackup.configure({
+              directoryPath: autoBackupStatus.directoryPath,
+              enabled: true
+            });
+            renderAutoBackupStatus(status);
+          }
+        } catch (error) {
+          await window.api.showMessageBox({
+            type: "error",
+            title: autoBackupL10n("errorTitle", "Automatic backup error"),
+            message: backupErrorMessage(error)
+          });
+        }
+      });
+
+      $("#btn-auto-backup-now").click(async function () {
+        try {
+          await window.api.autoBackup.create();
+        } catch (error) {
+          await window.api.showMessageBox({
+            type: "error",
+            title: autoBackupL10n("errorTitle", "Automatic backup error"),
+            message: backupErrorMessage(error)
+          });
+        }
+      });
 
       $("#btn-backup-export").click(async function () {
         const self = $(this);
@@ -910,6 +1029,7 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
       $("#btn-backup-import").click(async function () {
         const self = $(this);
         self.css("pointer-events", "none");
+        let autoBackupSuspended = false;
         try {
           const dialog = await window.api.showOpenDialog({
             title: backupL10n("importButton", "Restore from file"),
@@ -936,8 +1056,22 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
             cancelId: 0
           });
           if (confirm.response !== 1) return;
+          await window.api.autoBackup.suspend();
+          autoBackupSuspended = true;
           if (isConfig) await backup.importConfig(filePath);
           else await backup.importBackup(filePath);
+          try {
+            renderAutoBackupStatus(await window.api.autoBackup.resume());
+          } catch (resumeError) {
+            console.error("[AutoBackup] Could not resume after restore:", resumeError);
+            renderAutoBackupStatus({ ...autoBackupStatus, lastError: resumeError.message || String(resumeError) });
+            await window.api.showMessageBox({
+              type: "error",
+              title: autoBackupL10n("errorTitle", "Automatic backup error"),
+              message: backupErrorMessage(resumeError)
+            });
+          }
+          autoBackupSuspended = false;
           await window.api.showMessageBox({
             type: "info",
             title: backupL10n("importSuccessTitle", "Backup restored"),
@@ -951,6 +1085,18 @@ window.refreshSteamKeyFromDisk = reloadSteamKeyFromDisk;
             message: backupErrorMessage(err)
           });
         } finally {
+          if (autoBackupSuspended) {
+            try {
+              renderAutoBackupStatus(await window.api.autoBackup.resume());
+            } catch (resumeError) {
+              console.error("[AutoBackup] Could not resume after restore:", resumeError);
+              await window.api.showMessageBox({
+                type: "error",
+                title: autoBackupL10n("errorTitle", "Automatic backup error"),
+                message: backupErrorMessage(resumeError)
+              });
+            }
+          }
           self.css("pointer-events", "initial");
         }
       });

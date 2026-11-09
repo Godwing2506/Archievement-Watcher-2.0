@@ -6,23 +6,18 @@ const ini = require('@xan105/ini');
 const ffs = require('@xan105/fs');
 const AdmZip = require('adm-zip');
 const regedit = require('./reg_shim');
+const { DATA_DIRS } = require('./backupPaths');
 
 const BACKUP_FORMAT_VERSION = 1;
 const BACKUP_EXTENSION = '.awbackup.zip';
 
-/** Carpetas relativas a userData que contienen progreso y configuración esencial */
-const DATA_DIRS = [
-  'cfg',
-  'steam_cache/data',
-  'steam_cache/user',
-  'uplay_cache'
-];
 const BACKUP_DIRS = DATA_DIRS;
 
 const PLAYTIME_REG = 'SOFTWARE/Achievement Watcher/Playtime/Steam';
 const PLAYTIME_ZIP_PATH = 'cfg/playtime_export.json';
 
-function getUserDataRoot() {
+function getUserDataRoot(userDataPath) {
+  if (typeof userDataPath === 'string' && userDataPath) return userDataPath;
   const remote = require('@electron/remote');
   return remote.app.getPath('userData');
 }
@@ -78,8 +73,8 @@ async function importPlaytime(data) {
 /**
  * @returns {{ path: string, stats: { files: number, bytes: number } }}
  */
-module.exports.exportBackup = async (destPath) => {
-  const userData = getUserDataRoot();
+module.exports.exportBackup = async (destPath, userDataPath) => {
+  const userData = getUserDataRoot(userDataPath);
   const manifest = {
     formatVersion: BACKUP_FORMAT_VERSION,
     app: 'Achievement-Watcher',
@@ -277,7 +272,8 @@ module.exports.describeBackupContents = () => ({
     'Tiempo de juego registrado en Windows (registro)'
   ],
   excludes: [
-    'Cachés de iconos y esquemas (se vuelven a descargar)',
-    'Logs'
+    'Caché de esquemas de Steam (se vuelve a descargar)',
+    'Archivos originales de logros de juegos/emuladores y capturas o videos externos',
+    'Logs y configuración local de la copia automática'
   ]
 });

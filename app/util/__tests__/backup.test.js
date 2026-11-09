@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const AdmZip = require('adm-zip');
+const { createAutoBackupManager } = require('../autoBackup');
 jest.mock('@electron/remote', () => ({
   app: { getPath: () => global.__backupTestUserData }
 }));
@@ -90,13 +91,15 @@ describe('backup validation', () => {
     const cfgDir = path.join(global.__backupTestUserData, 'cfg');
     fs.mkdirSync(cfgDir);
     fs.writeFileSync(path.join(cfgDir, 'options.ini'), '[achievement]\nhideZero=true');
+    fs.writeFileSync(path.join(global.__backupTestUserData, 'auto-backup.json'), '{"enabled":true}');
     const filePath = path.join(tempDir, 'export.awbackup.zip');
 
-    await expect(backup.exportBackup(filePath)).resolves.toMatchObject({
+    await expect(backup.exportBackup(filePath, global.__backupTestUserData)).resolves.toMatchObject({
       path: filePath,
       stats: { files: 2, bytes: expect.any(Number) }
     });
     await expect(backup.validateBackup(filePath)).resolves.toMatchObject({ files: 2 });
+    expect(new AdmZip(filePath).getEntry('auto-backup.json')).toBeNull();
     await backup.exportBackup(filePath);
     await expect(backup.validateBackup(filePath)).resolves.toMatchObject({ files: 2 });
   });
@@ -112,5 +115,29 @@ describe('backup validation', () => {
     });
     expect(fs.readFileSync(path.join(global.__backupTestUserData, 'cfg', 'options.ini'), 'utf8'))
       .toContain('hideZero=false');
+  });
+
+  test('automatic backups use the existing archive format without exporting local destination settings', async () => {
+    const cfgDir = path.join(global.__backupTestUserData, 'cfg');
+    fs.mkdirSync(cfgDir);
+    fs.writeFileSync(path.join(cfgDir, 'options.ini'), '[achievement]\nhideZero=true');
+    fs.writeFileSync(path.join(global.__backupTestUserData, 'auto-backup.json'), '{"enabled":true}');
+    const destinationPath = path.join(tempDir, 'cloud');
+    fs.mkdirSync(destinationPath);
+    const manager = createAutoBackupManager({
+      userDataPath: global.__backupTestUserData,
+      backup,
+      watch: () => ({ close: () => {} })
+    });
+
+    try {
+      await manager.configure({ directoryPath: destinationPath, enabled: true });
+      const backupFile = path.join(destinationPath, fs.readdirSync(destinationPath)[0]);
+
+      await expect(backup.validateBackup(backupFile)).resolves.toMatchObject({ files: 2 });
+      expect(new AdmZip(backupFile).getEntry('auto-backup.json')).toBeNull();
+    } finally {
+      await manager.stop();
+    }
   });
 });

@@ -47,4 +47,25 @@ async function scan() {
   return out;
 }
 
-module.exports = { EMULATORS, list, allRoots, scan };
+async function findByAppId(appId) {
+  const id = String(appId || "");
+  if (!/^[1-9]\d{0,9}$/.test(id)) throw new Error("ERR_MANUAL_APPID_INVALID");
+
+  for (const emu of list()) {
+    for (const root of emu.roots) {
+      for (const file of emu.files) {
+        const filePath = path.join(root, id, file);
+        if (fs.existsSync(filePath)) {
+          return {
+            path: path.dirname(filePath),
+            file: filePath,
+            emulator: emu.id
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+module.exports = { EMULATORS, list, allRoots, scan, findByAppId };

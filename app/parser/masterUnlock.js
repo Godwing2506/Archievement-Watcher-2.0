@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const ini = require("@xan105/ini");
 const ffs = require("@xan105/fs");
+const emulators = require("./emulators.js");
 const {
   resolveStatLinks,
   hasClassicAchievementSections,
@@ -186,9 +187,30 @@ function namesWithoutStatLinks(links, namesToUnlock) {
   return namesToUnlock.filter((n) => !linked.has(n));
 }
 
+function getUnlockData(game) {
+  const data = game && game.data;
+  if (!data) return null;
+  if (["file", "manual"].includes(data.type) && (data.path || data.type === "manual")) {
+    return data;
+  }
+  if (!Array.isArray(data.sources)) return null;
+  return data.sources.find((source) =>
+    source && ["file", "manual"].includes(source.type) && (source.path || source.type === "manual")
+  ) || null;
+}
+
 async function unlock(game, namesToUnlock, lang) {
-  if (!game || !game.data || game.data.type !== "file" || !game.data.path) {
-    throw new Error("Este juego no usa archivos de emulador Steam (solo emuladores locales).");
+  const unlockData = getUnlockData(game);
+  if (!game || !unlockData) {
+    throw new Error("No se encontró información del juego para desbloquear logros.");
+  }
+  game = { ...game, data: unlockData };
+  if (game.data.type === "manual" && !game.data.path) {
+    const location = await emulators.findByAppId(game.appid);
+    if (location) game = { ...game, data: { ...game.data, ...location } };
+  }
+  if (!["file", "manual"].includes(game.data.type) || !game.data.path) {
+    throw new Error(`No se encontró un archivo de logros de emulador compatible para el AppID ${game.appid}.`);
   }
   if (!Array.isArray(namesToUnlock) || namesToUnlock.length === 0) {
     throw new Error("No hay logros que desbloquear.");
@@ -244,6 +266,8 @@ function getLockedNames(game) {
 module.exports = {
   detectStore,
   unlock,
+  getUnlockData,
+  canUnlock: (game) => !!getUnlockData(game),
   getLockedNames,
   MASTER_CODES: ["platinum", "platino", "master"]
 };

@@ -245,11 +245,27 @@ function translateUI(lang,locale,template,steamLanguages){
           for (const line of inc) {
             $("#backup-includes-list").append(`<li>${clear(line)}</li>`);
           }
+          $("#backup-excludes-title").text(clear(template.settings.backup.excludesTitle));
+          $("#backup-excludes-list").empty();
+          for (const line of template.settings.backup.excludes || []) {
+            $("#backup-excludes-list").append(`<li>${clear(line)}</li>`);
+          }
           $("#btn-backup-export span").text(clear(template.settings.backup.exportButton));
           $("#backup-export-help").text(clear(template.settings.backup.exportHelp));
           $("#btn-backup-import span").text(clear(template.settings.backup.importButton));
           $("#backup-import-help").text(clear(template.settings.backup.importHelp));
+          const automatic = template.settings.backup.automatic || {};
+          $("#auto-backup-title").text(clear(automatic.title));
+          $("#auto-backup-intro").text(clear(automatic.intro));
+          $("#btn-auto-backup-folder span").text(clear(automatic.chooseFolder));
+          $("#auto-backup-folder-help").text(clear(automatic.folderHelp));
+          $("#btn-auto-backup-now span").text(clear(automatic.createNow));
+          $("#auto-backup-privacy").text(clear(automatic.privacy));
+          window.__autoBackupL10n = automatic;
           window.__backupL10n = template.settings.backup;
+          if (typeof window.refreshAutoBackupStatus === "function") {
+            window.refreshAutoBackupStatus();
+          }
         }
         $("#settingNav li[data-view='debug'] span").text(clear(template.settings.sideMenu.debug));
         const cacheText = template.settings.cache || {};

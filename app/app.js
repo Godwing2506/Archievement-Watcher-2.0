@@ -54,7 +54,10 @@ var app = {
     }
     const lang = (this.config && this.config.achievement && this.config.achievement.lang) || "latam";
     const result = await masterUnlockMod.unlock(game, names, lang);
-    await this.refreshCurrentGame(names.length === 1 ? names[0] : null);
+    await this.refreshCurrentGame(
+      names.length === 1 ? names[0] : null,
+      masterUnlockMod.getUnlockData(game)
+    );
     return result;
   },
   onStart : function(){
@@ -276,8 +279,11 @@ var app = {
         `);
         $("#btn-manual-cancel").click(() => $("#manual-add-overlay").hide());
         $("#btn-manual-confirm").click(async function() {
-          const appid = $("#manual-appid-input").val().trim();
-          if (!appid) return;
+          const appid = String($("#manual-appid-input").val() || "").trim();
+          if (!/^[1-9]\d{0,9}$/.test(appid)) {
+            remote.dialog.showErrorBox('Error', 'Introduce un AppID de Steam numérico válido.');
+            return;
+          }
           $("#manual-add-overlay").hide();
           try {
             await steam.getGameData({
@@ -286,6 +292,7 @@ var app = {
               key: (app.config.steam && app.config.steam.apiKey) ? app.config.steam.apiKey : '',
               autoTranslate: app.config.achievement.autoTranslate 
             });
+            await achievements.addManualGame(appid);
             app.onStart();
             if (typeof window.showToast === "function") {
               window.showToast(formatUiMessage("gameAdded", "Game data saved."), "success");
@@ -399,7 +406,9 @@ var app = {
 
       for (let game in list) {
 
-        if ( list[game].achievement.unlocked > 0 || self.config.achievement.hideZero == false) {
+        if ( list[game].source === "Manual"
+          || list[game].achievement.unlocked > 0
+          || self.config.achievement.hideZero == false) {
         
         let progress = list[game].achievement.total === 0 ? 0 : Math.round((100 * list[game].achievement.unlocked) / list[game].achievement.total);
         
@@ -720,7 +729,7 @@ var app = {
           $(template).appendTo(lock).addClass("hidden");
         } else {
           const masterOn = app.isMasterModeEnabled && app.isMasterModeEnabled()
-            && game.data && game.data.type === "file"
+            && masterUnlockMod.canUnlock(game)
             && game.system !== "playstation" && game.system !== "uplay";
           if (masterOn) {
             lock.append(template.replace('class="achievement"', 'class="achievement master-clickable" title="Clic para desbloquear (Modo Master)"'));
@@ -781,14 +790,17 @@ var app = {
     }
     nodes.forEach((el) => app._iconObserver.observe(el));
   },
-  refreshCurrentGame: async function(newlyUnlockedName){
+  refreshCurrentGame: async function(newlyUnlockedName, sourceData){
     const game = $("#achievement .header").data("currentGame");
     if (!game || !game.appid) return;
     if (!game.data) return;
+    const refreshGame = sourceData && sourceData !== game.data
+      ? { ...game, data: sourceData }
+      : game;
     const btn = $("#btn-refresh-ach");
     if (btn.length) btn.addClass("refreshing").css("pointer-events","none");
     try {
-      const refreshed = await achievements.refreshAchievements(game, app.config);
+      const refreshed = await achievements.refreshAchievements(refreshGame, app.config);
       if (refreshed) app.renderAchievementList(game, null, newlyUnlockedName);
     } finally {
       if (btn.length) setTimeout(() => { btn.removeClass("refreshing").css("pointer-events",""); }, 800);
